@@ -895,7 +895,8 @@
         critical: true
       });
     }
-    tracks.push({ src: 'audio/ui/gap-sentence.m4a', rate: 1, title });
+    // Short beat between lines so the dialogue flows (gap-sentence.m4a was 2.6 s).
+    tracks.push({ src: 'audio/ui/gap-line.m4a', rate: 1, title });
     return tracks;
   }
 
@@ -904,7 +905,7 @@
   function handleSentenceEnd(viaSpeech) {
     state.playsDone++;
     const run = fn => {
-      if (viaSpeech) state.loopTimer = setTimeout(fn, 2600);
+      if (viaSpeech) state.loopTimer = setTimeout(fn, 600);
       else fn();
     };
     if (state.repeat === 0 || state.playsDone < state.repeat) {
