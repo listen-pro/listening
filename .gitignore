@@ -1,0 +1,6 @@
+tools/audio/node_modules/
+tools/audio/.cache/
+tools/audio/.tmp/
+tools/audio/preview/
+tools/audio/*.log
+.venv/

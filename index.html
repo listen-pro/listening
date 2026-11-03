@@ -4,13 +4,16 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <meta
       name="description"
       content="English Listening Practice Tool - Improve your English listening skills"
     />
-    <meta name="theme-color" content="#0f0e17" />
+    <meta name="theme-color" content="#0b0b12" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Listening Pro</title>
     <link rel="icon" type="image/svg+xml" href="icon.svg?v=2" />
     <link rel="apple-touch-icon" href="icon.svg?v=2" />
@@ -24,6 +27,12 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="css/style.css" />
+    <!-- Apply the saved theme before first paint so light mode does not flash dark. -->
+    <script>
+      if (localStorage.getItem("lp_theme") === "light") {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    </script>
     <!-- Auth guard: runs before page renders to avoid flash of protected content -->
     <script src="js/auth.js"></script>
     <script>
@@ -37,234 +46,111 @@
     </script>
   </head>
   <body>
+    <audio id="bgPlayer" preload="auto" playsinline webkit-playsinline style="display:none"></audio>
     <div id="app">
-      <!-- Header -->
-      <header class="app-header">
-        <div class="logo"><i class="ri-headphone-fill"></i> ListenPro</div>
-        <div class="header-actions">
-          <button
-            id="btnPersonalize"
-            class="icon-btn"
-            data-i18n-title="personalizeTitle"
-            title="Personalize"
-          >
-            <i class="ri-settings-3-line"></i>
-          </button>
-          <button
-            id="btnTheme"
-            class="icon-btn"
-            data-i18n-title="titleTheme"
-            title="Toggle Theme"
-          >
-            <i class="ri-moon-line" id="themeIcon"></i>
-          </button>
-          <div class="dropdown" id="headerDropdown">
+      <!-- Top bar: brand, quick actions, topic rail -->
+      <header class="topbar" id="topbar">
+        <div class="topbar-row">
+          <div class="brand">
+            <span class="brand-mark"><i class="ri-headphone-fill"></i></span>
+            <span class="brand-name">ListenPro</span>
+          </div>
+          <div class="topbar-actions">
             <button
-              id="btnMore"
+              id="btnWordbook"
               class="icon-btn"
-              data-i18n-title="titleMore"
-              title="More Options"
+              data-i18n-title="wordbookTitle"
+              title="Word Book"
             >
-              <i class="ri-more-2-fill"></i>
+              <i class="ri-bookmark-3-line"></i>
+              <span class="icon-badge" id="wordbookBadge" hidden></span>
             </button>
-            <div class="dropdown-menu">
-              <button id="btnLang" class="dropdown-item">
-                <i class="ri-translate-2"></i>
-                <span data-i18n="language">Language</span>
-              </button>
-              <button id="btnStats" class="dropdown-item">
-                <i class="ri-bar-chart-2-fill"></i>
-                <span data-i18n="statsTitle">Statistics</span>
-              </button>
-              <button id="btnWordbook" class="dropdown-item">
-                <i class="ri-book-mark-fill"></i>
-                <span data-i18n="wordbookTitle">Word Book</span>
-              </button>
-              <div class="dropdown-divider"></div>
-              <button id="btnLogout" class="dropdown-item text-danger">
-                <i class="ri-logout-circle-r-line"></i>
-                <span data-i18n="logout">Logout</span>
-              </button>
-            </div>
+            <button
+              id="btnMenu"
+              class="avatar-btn"
+              data-i18n-title="menuTitle"
+              title="Me"
+            >
+              <span id="avatarInitial">L</span>
+            </button>
           </div>
         </div>
+        <nav class="rail-wrap" aria-label="Topics">
+          <button
+            id="btnTopicSheet"
+            class="rail-grid-btn"
+            data-i18n-title="topicsTitle"
+            title="Choose a topic"
+          >
+            <i class="ri-apps-2-line"></i>
+          </button>
+          <div class="topic-rail" id="topicRail" role="tablist"></div>
+        </nav>
       </header>
 
-      <!-- Filters -->
-      <section class="filter-bar">
-        <div class="filter-group">
-          <label data-i18n="type">Type</label>
-          <div class="seg-control" id="typeFilter">
-            <button
-              class="seg-btn active"
-              data-value="category"
-              data-i18n="category"
-            >
-              Category
-            </button>
-            <button class="seg-btn" data-value="dialogue" data-i18n="dialogue">
-              Dialogue
-            </button>
+      <main class="stage">
+        <!-- Current topic + level filter -->
+        <section class="topic-head" id="topicHead">
+          <span class="topic-head-icon" id="topicHeadIcon"><i class="ri-apps-2-line"></i></span>
+          <div class="topic-head-text">
+            <h1 id="topicTitle">&nbsp;</h1>
+            <p id="topicMeta">&nbsp;</p>
           </div>
-        </div>
-        <div class="filter-group">
-          <label data-i18n="level">Level</label>
-          <div class="seg-control" id="levelFilter">
-            <!-- <button class="seg-btn" data-value="all" data-i18n="all">
-              All
-            </button> -->
-            <button class="seg-btn active" data-value="elementary">
-              <i class="ri-seedling-line"></i> A1-A2
-            </button>
-            <button class="seg-btn" data-value="intermediate">
-              <i class="ri-fire-line"></i> B1-B2
-            </button>
-            <button class="seg-btn" data-value="advanced">
-              <i class="ri-rocket-line"></i> C1-C2
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Sentence Display & Player Sticky Wrap -->
-      <div class="sticky-player-wrap">
-        <section class="display-card" id="displayCard">
-          <div class="card-badge" id="cardBadge">Elementary</div>
-          <p class="sentence-text" id="sentenceText" data-i18n="selectPrompt">
-            Select a sentence to start practicing
-          </p>
-          <div class="card-meta">
-            <span id="sentenceIndex">0 / 0</span>
-            <div style="display: flex; gap: 8px; align-items: center">
-              <!-- Mini Player Controls (visible only when collapsed) -->
-              <div class="mini-player-controls" id="miniPlayerControls">
-                <button id="btnMiniPrev" class="icon-btn-sm">
-                  <i class="ri-skip-back-fill"></i>
-                </button>
-                <button id="btnMiniPlay" class="icon-btn-sm">
-                  <i class="ri-play-fill" id="miniPlayIcon"></i>
-                </button>
-                <button id="btnMiniNext" class="icon-btn-sm">
-                  <i class="ri-skip-forward-fill"></i>
-                </button>
-              </div>
-              <button
-                id="btnTogglePlayer"
-                class="icon-btn-sm"
-                data-i18n-title="titlePlayer"
-                title="Toggle Player"
-              >
-                <i class="ri-arrow-down-s-line" id="playerToggleIcon"></i>
-              </button>
-              <button
-                id="btnToggleCn"
-                class="icon-btn-sm"
-                data-i18n-title="titleTrans"
-                title="Toggle EN/CN"
-              >
-                <i class="ri-translate"></i>
-              </button>
-              <button
-                id="btnFontSize"
-                class="icon-btn-sm"
-                data-i18n-title="titleFont"
-                title="Font Size"
-              >
-                <i class="ri-font-size-2"></i>
-              </button>
-            </div>
-          </div>
+          <button id="btnLevel" class="pill-btn" aria-haspopup="menu">
+            <span class="lvl-dot" id="levelDot"></span>
+            <span id="levelLabel">All</span>
+            <i class="ri-arrow-down-s-line"></i>
+          </button>
         </section>
 
-        <!-- Player Controls -->
-        <section class="player-section" id="playerSection">
-          <div class="progress-bar-wrap" id="progressWrap">
-            <div class="progress-bar" id="progressBar"></div>
-          </div>
-          <div class="player-controls">
-            <button id="btnPrev" class="ctrl-btn">
-              <i class="ri-skip-back-fill"></i>
-            </button>
-            <button id="btnPlay" class="ctrl-btn ctrl-btn-main">
-              <i class="ri-play-fill" id="playIcon"></i>
-            </button>
-            <button id="btnNext" class="ctrl-btn">
-              <i class="ri-skip-forward-fill"></i>
-            </button>
-          </div>
-          <div class="player-options">
-            <div class="option-group">
-              <label data-i18n="speed">Speed</label>
-              <div class="speed-control" id="speedControl">
-                <button class="speed-btn" data-speed="0.5">0.5x</button>
-                <button class="speed-btn active" data-speed="0.75">
-                  0.75x
-                </button>
-                <button class="speed-btn" data-speed="1">1x</button>
-                <button class="speed-btn" data-speed="1.25">1.25x</button>
-                <button class="speed-btn" data-speed="1.5">1.5x</button>
-              </div>
-            </div>
-            <div class="option-group">
-              <label data-i18n="mode">Mode</label>
-              <div class="seg-control" id="playMode">
-                <button class="seg-btn active" data-value="sequential">
-                  <i class="ri-order-play-fill"></i>
-                  <span data-i18n="sequential">Sequential</span>
-                </button>
-                <button class="seg-btn" data-value="loop">
-                  <i class="ri-repeat-one-fill"></i>
-                  <span data-i18n="loop">Loop</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-      <!-- /sticky-player-wrap -->
-
-      <!-- Sentence List -->
-      <section class="sentence-list-section">
-        <div class="list-header">
-          <div style="display: flex; align-items: center; gap: 8px">
-            <h2 data-i18n="sentences">Sentences</h2>
-            <span class="count-badge" id="listCount">…</span>
-          </div>
-          <div style="display: flex; gap: 8px">
-            <button
-              id="btnBackToTop"
-              class="icon-btn-sm"
-              data-i18n-title="titleTop"
-              title="Back to Top"
-            >
-              <i class="ri-arrow-up-line"></i>
-            </button>
-            <button
-              id="btnLocate"
-              class="icon-btn-sm"
-              data-i18n-title="titleLocate"
-              title="Locate Current Sentence"
-            >
-              <i class="ri-focus-3-line"></i>
-            </button>
-          </div>
-        </div>
-        <ul class="sentence-list" id="sentenceList">
+        <!-- Conversation list -->
+        <ul class="convo" id="sentenceList">
           <!-- Skeleton placeholders shown while data.js is loading/parsing.
                Removed automatically when renderList() first runs. -->
-          <li class="sentence-item-skeleton"><span class="sk-num"></span><span class="sk-text"></span><span class="sk-dot"></span></li>
-          <li class="sentence-item-skeleton"><span class="sk-num"></span><span class="sk-text"></span><span class="sk-dot"></span></li>
-          <li class="sentence-item-skeleton"><span class="sk-num"></span><span class="sk-text"></span><span class="sk-dot"></span></li>
-          <li class="sentence-item-skeleton"><span class="sk-num"></span><span class="sk-text"></span><span class="sk-dot"></span></li>
-          <li class="sentence-item-skeleton"><span class="sk-num"></span><span class="sk-text"></span><span class="sk-dot"></span></li>
-          <li class="sentence-item-skeleton"><span class="sk-num"></span><span class="sk-text"></span><span class="sk-dot"></span></li>
-          <li class="sentence-item-skeleton"><span class="sk-num"></span><span class="sk-text"></span><span class="sk-dot"></span></li>
-          <li class="sentence-item-skeleton"><span class="sk-num"></span><span class="sk-text"></span><span class="sk-dot"></span></li>
+          <li class="msg-skeleton"><span class="sk-avatar"></span><span class="sk-bubble"></span></li>
+          <li class="msg-skeleton is-b"><span class="sk-avatar"></span><span class="sk-bubble"></span></li>
+          <li class="msg-skeleton"><span class="sk-avatar"></span><span class="sk-bubble"></span></li>
+          <li class="msg-skeleton is-b"><span class="sk-avatar"></span><span class="sk-bubble"></span></li>
+          <li class="msg-skeleton"><span class="sk-avatar"></span><span class="sk-bubble"></span></li>
+          <li class="msg-skeleton is-b"><span class="sk-avatar"></span><span class="sk-bubble"></span></li>
         </ul>
-      </section>
+      </main>
 
-      <!-- Word Popup -->
+      <!-- Appears when the current sentence is scrolled out of view -->
+      <button class="locate-pill" id="btnLocate" type="button">
+        <i class="ri-arrow-down-line" id="locateIcon"></i>
+        <span data-i18n="backToCurrent">Now playing</span>
+      </button>
+
+      <!-- Player dock -->
+      <div class="dock" id="dock">
+        <div class="dock-progress"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="dock-row">
+          <button id="btnMode" class="dock-btn" data-i18n-title="titleMode" title="Play mode">
+            <i class="ri-order-play-line" id="modeIcon"></i>
+          </button>
+          <button id="btnPrev" class="dock-btn" data-i18n-title="titlePrev" title="Previous">
+            <i class="ri-skip-back-fill"></i>
+          </button>
+          <button id="btnPlay" class="dock-play" data-i18n-title="titlePlay" title="Play / Pause">
+            <i class="ri-play-fill" id="playIcon"></i>
+          </button>
+          <button id="btnNext" class="dock-btn" data-i18n-title="titleNext" title="Next">
+            <i class="ri-skip-forward-fill"></i>
+          </button>
+          <button id="btnSpeed" class="dock-btn dock-speed" data-i18n-title="titleSpeed" title="Speed" aria-haspopup="menu">
+            <span id="speedLabel">1×</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Popovers -->
+      <div class="popover" id="speedPopover" role="menu"></div>
+      <div class="popover" id="levelPopover" role="menu"></div>
+
+      <!-- Word Popup (non-modal card) -->
       <div class="word-popup" id="wordPopup">
+        <span class="grabber"></span>
         <div class="popup-header">
           <span class="popup-word" id="popupWord"></span>
           <div class="popup-actions">
@@ -281,88 +167,123 @@
         <div class="popup-examples" id="popupExamples"></div>
       </div>
 
-      <!-- Personalization Drawer -->
-      <div class="drawer-overlay" id="settingsOverlay"></div>
-      <aside class="settings-drawer" id="settingsDrawer">
-        <div class="drawer-header">
-          <h3 data-i18n="personalizeTitle">Personalization</h3>
-          <button class="popup-close" id="closeSettingsDrawer">
-            <i class="ri-close-line"></i>
+      <!-- Sheets share one scrim -->
+      <div class="scrim" id="scrim"></div>
+
+      <!-- Topic Sheet -->
+      <section class="sheet" id="topicSheet" role="dialog" aria-modal="true">
+        <div class="sheet-handle"><span class="grabber"></span></div>
+        <header class="sheet-head">
+          <div>
+            <h2 data-i18n="topicsTitle">Choose a topic</h2>
+            <p data-i18n="topicsSub">Pick a scene to practise</p>
+          </div>
+          <button class="sheet-close" data-close-sheet title="Close"><i class="ri-close-line"></i></button>
+        </header>
+        <div class="sheet-body" id="topicSheetBody"></div>
+      </section>
+
+      <!-- Me / Settings Sheet -->
+      <section class="sheet" id="menuSheet" role="dialog" aria-modal="true">
+        <div class="sheet-handle"><span class="grabber"></span></div>
+        <header class="sheet-head">
+          <div class="profile">
+            <span class="profile-avatar" id="profileAvatar">L</span>
+            <div>
+              <h2 id="profileName">ListenPro</h2>
+              <p data-i18n="profileSub">Keep your ears warm</p>
+            </div>
+          </div>
+          <button class="sheet-close" data-close-sheet title="Close"><i class="ri-close-line"></i></button>
+        </header>
+        <div class="sheet-body">
+          <div class="stat-tiles" id="statTiles"></div>
+
+          <h3 class="sheet-group" data-i18n="groupListening">Listening</h3>
+          <div class="set-card">
+            <div class="set-row">
+              <span class="set-label"><i class="ri-earth-line"></i><span data-i18n="accentLabel">Accent</span></span>
+              <div class="seg" id="accentControl">
+                <button class="seg-btn accent-btn" data-accent="us" data-i18n="accentUs">US</button>
+                <button class="seg-btn accent-btn" data-accent="uk" data-i18n="accentUk">UK</button>
+              </div>
+            </div>
+            <div class="set-row set-row-col">
+              <span class="set-label"><i class="ri-user-voice-line"></i><span data-i18n="voiceLabel">Voice</span></span>
+              <div class="voice-select-wrap">
+                <div class="custom-select" id="voiceSelect">
+                  <div class="select-trigger">
+                    <span class="select-value" data-i18n="voiceLoading">Loading voices…</span>
+                    <i class="ri-arrow-down-s-line"></i>
+                  </div>
+                  <div class="select-options" id="voiceOptions"></div>
+                </div>
+                <button
+                  id="btnPreviewVoice"
+                  class="voice-preview-btn"
+                  data-i18n-title="voicePreviewTitle"
+                  title="Preview Voice"
+                >
+                  <i class="ri-volume-up-line"></i>
+                </button>
+              </div>
+              <p class="set-hint" data-i18n="voiceHint">Used only when a sentence has no recorded audio.</p>
+            </div>
+          </div>
+
+          <h3 class="sheet-group" data-i18n="groupDisplay">Display</h3>
+          <div class="set-card">
+            <div class="set-row">
+              <span class="set-label"><i class="ri-contrast-2-line"></i><span data-i18n="themeLabel">Theme</span></span>
+              <div class="seg" id="themeControl">
+                <button class="seg-btn" data-theme-value="dark" data-i18n="themeDark">Dark</button>
+                <button class="seg-btn" data-theme-value="light" data-i18n="themeLight">Light</button>
+              </div>
+            </div>
+            <div class="set-row">
+              <span class="set-label"><i class="ri-translate-2"></i><span data-i18n="language">Language</span></span>
+              <div class="seg" id="langControl">
+                <button class="seg-btn" data-lang-value="zh">中文</button>
+                <button class="seg-btn" data-lang-value="en">English</button>
+              </div>
+            </div>
+            <div class="set-row">
+              <span class="set-label"><i class="ri-font-size-2"></i><span data-i18n="fontLabel">Text size</span></span>
+              <div class="stepper">
+                <button class="stepper-btn" id="btnFontDown" title="A-"><i class="ri-subtract-line"></i></button>
+                <span class="stepper-value" id="fontValue">18</span>
+                <button class="stepper-btn" id="btnFontUp" title="A+"><i class="ri-add-line"></i></button>
+              </div>
+            </div>
+          </div>
+
+          <button id="btnLogout" class="logout-btn">
+            <i class="ri-logout-circle-r-line"></i>
+            <span data-i18n="logout">Logout</span>
           </button>
         </div>
-        <div class="drawer-section">
-          <label class="drawer-label" data-i18n="accentLabel"
-            >English Accent</label
-          >
-          <div class="seg-control" id="accentControl">
-            <button
-              class="seg-btn accent-btn"
-              data-accent="us"
-              data-i18n="accentUs"
-            >
-              US
-            </button>
-            <button
-              class="seg-btn accent-btn"
-              data-accent="uk"
-              data-i18n="accentUk"
-            >
-              UK
-            </button>
-          </div>
-        </div>
-        <div class="drawer-section">
-          <label class="drawer-label" data-i18n="voiceLabel">Voice</label>
-          <div class="voice-select-wrap">
-            <div class="custom-select" id="voiceSelect">
-              <div class="select-trigger">
-                <span class="select-value" data-i18n="voiceLoading"
-                  >Loading voices…</span
-                >
-                <i class="ri-arrow-down-s-line"></i>
-              </div>
-              <div class="select-options" id="voiceOptions"></div>
-            </div>
-            <button
-              id="btnPreviewVoice"
-              class="voice-preview-btn"
-              data-i18n-title="voicePreviewTitle"
-              title="Preview Voice"
-            >
-              <i class="ri-volume-up-line"></i>
-            </button>
-          </div>
-        </div>
-      </aside>
+      </section>
 
-      <!-- Stats Modal -->
-      <div class="modal-overlay" id="statsModal">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h2 data-i18n="statsTitle">Learning Stats</h2>
-            <button class="popup-close" id="closeStats">
-              <i class="ri-close-line"></i>
-            </button>
-          </div>
-          <div class="stats-grid" id="statsGrid"></div>
-        </div>
-      </div>
-
-      <!-- Wordbook Modal -->
-      <div class="modal-overlay" id="wordbookModal">
-        <div class="modal-content">
-          <div class="modal-header">
+      <!-- Wordbook Sheet -->
+      <section class="sheet" id="wordbookSheet" role="dialog" aria-modal="true">
+        <div class="sheet-handle"><span class="grabber"></span></div>
+        <header class="sheet-head">
+          <div>
             <h2 data-i18n="wordbookTitle">Word Book</h2>
-            <button class="popup-close" id="closeWordbook">
-              <i class="ri-close-line"></i>
-            </button>
+            <p id="wordbookSub">&nbsp;</p>
           </div>
+          <button class="sheet-close" data-close-sheet title="Close"><i class="ri-close-line"></i></button>
+        </header>
+        <div class="sheet-body">
           <ul class="wordbook-list" id="wordbookList"></ul>
         </div>
-      </div>
+      </section>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
     </div>
 
     <script defer src="js/data.js"></script>
+    <script defer src="js/topics.js"></script>
     <script defer src="js/audio.js"></script>
     <script defer src="js/app.js"></script>
     <script defer src="js/auth-guard.js"></script>

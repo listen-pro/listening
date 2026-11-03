@@ -1,10 +1,11 @@
-const CACHE_NAME = 'listen-pro-v1.10';
+const CACHE_NAME = 'listen-pro-v1.15';
 const ASSETS = [
   './',
   './index.html',
   './login.html',
   './css/style.css',
   './js/data.js',
+  './js/topics.js',
   './js/dictionary.js',
   './js/audio.js',
   './js/app.js',
@@ -31,6 +32,8 @@ self.addEventListener('fetch', e => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // Media files must bypass the worker so the browser can keep playing them in the background.
+  if (url.pathname.includes('/audio/')) return;
 
   const networkFirst = async () => {
     const cache = await caches.open(CACHE_NAME);

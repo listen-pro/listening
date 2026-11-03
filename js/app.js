@@ -2,14 +2,53 @@
 (function() {
   'use strict';
 
+  // ---- Topics ----
+  // TOPICS comes from js/topics.js. Sentences whose topic is missing or unknown
+  // are collected under a generated "other" topic so they never disappear.
+  const LEVELS = ['elementary', 'intermediate', 'advanced'];
+  const LEVEL_CEFR = { elementary: 'A1–A2', intermediate: 'B1–B2', advanced: 'C1–C2' };
+  const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
+  const FONT_MIN = 14;
+  const FONT_MAX = 26;
+
+  const topicList = (typeof TOPICS !== 'undefined' && Array.isArray(TOPICS) ? TOPICS : []).slice();
+  const topicIds = new Set(topicList.map(t => t.id));
+  if (SENTENCES.some(s => !topicIds.has(s.topic))) {
+    topicList.push({ id: 'other', scene: 'daily', icon: 'ri-more-line', hue: 230, name: { zh: '其他', en: 'Other' } });
+    topicIds.add('other');
+  }
+  const topicOf = s => (topicIds.has(s.topic) ? s.topic : 'other');
+  const topicCounts = {};
+  SENTENCES.forEach(s => { const t = topicOf(s); topicCounts[t] = (topicCounts[t] || 0) + 1; });
+  const visibleTopics = topicList.filter(t => topicCounts[t.id] > 0);
+  const topicById = id => visibleTopics.find(t => t.id === id) || null;
+
+  function readSavedTopic() {
+    const saved = localStorage.getItem('lp_topic');
+    return saved === 'all' || topicById(saved) ? saved : 'all';
+  }
+
+  // How many times each line plays before moving on. 1 = in order, 0 = repeat forever.
+  const REPEAT_OPTIONS = [1, 2, 3, 5, 0];
+  function readSavedRepeat() {
+    const saved = parseInt(localStorage.getItem('lp_repeat'), 10);
+    return REPEAT_OPTIONS.includes(saved) ? saved : 1;
+  }
+
+  function readSavedLevel() {
+    const saved = localStorage.getItem('lp_level');
+    return saved === 'all' || LEVELS.includes(saved) ? saved : 'all';
+  }
+
   // State
   const state = {
     sentences: [...SENTENCES],
     filtered: [...SENTENCES],
     currentIndex: -1,
-    typeFilter: 'category',
-    levelFilter: 'elementary',
-    playMode: 'sequential',
+    topic: readSavedTopic(),
+    levelFilter: readSavedLevel(),
+    repeat: readSavedRepeat(),
+    playsDone: 0,
     speed: parseFloat(localStorage.getItem('lp_speed') || '0.75'),
     fontSize: parseInt(localStorage.getItem('lp_fontSize') || '18'),
     loopTimer: null,
@@ -18,7 +57,6 @@
     lang: localStorage.getItem('lp_lang') || 'en',
     showCn: localStorage.getItem('lp_showCn') === 'true',
     accent: localStorage.getItem('lp_accent') || 'us',
-    isPlayerCollapsed: localStorage.getItem('lp_playerCollapsed') === 'true',
     theme: localStorage.getItem('lp_theme') || 'dark',
     voiceName: localStorage.getItem('lp_voiceName') || 'Samantha',
     renderedCount: 0
@@ -26,17 +64,31 @@
 
   const i18n = {
     en: {
-      type: "Type", all: "All", category: "Category", dialogue: "Dialogue",
-      level: "Level", speed: "Speed", mode: "Mode", sequential: "Sequential", loop: "Loop",
-      sentences: "Sentences", statsTitle: "Learning Stats", wordbookTitle: "Word Book",
-      selectPrompt: "Select a sentence to start practicing",
-      statsSentences: "Sentences Played", statsWords: "Words Saved",
-      statsTotal: "Total Sentences", statsDict: "Dictionary Words",
+      allTopics: "All topics", topicsTitle: "Choose a topic", topicsSub: "Pick a scene to practise",
+      sceneDaily: "Daily life", sceneBusiness: "Business",
+      allLevels: "All levels", levelTitle: "Level",
+      unitSentences: n => `${n} ${n === 1 ? 'sentence' : 'sentences'}`,
+      unitTopics: n => `${n} topics`,
+      speedTitle: "Speed",
+      speedNames: { 0.5: "Very slow", 0.75: "Slow", 1: "Normal", 1.25: "Fast", 1.5: "Very fast" },
+      speedNext: v => `${v}× from the next sentence`,
+      sequential: "Play in order", loop: "Repeat one",
+      backToCurrent: "Now playing",
+      replay: "Replay", translation: "Translation",
+      emptyList: "No sentences here yet", emptyAction: "Show all levels",
+      tipWord: "Tip: tap a word in the highlighted line to look it up",
+      menuTitle: "Me", profileSub: "Keep your ears warm",
+      statsPlayed: "Plays", statsWords: "Saved words", statsTotal: "Library",
+      groupListening: "Listening", groupDisplay: "Display",
+      themeLabel: "Theme", themeDark: "Dark", themeLight: "Light",
+      fontLabel: "Text size",
+      wordbookTitle: "Word Book", wordbookCount: n => `${n} saved`,
       noDef: "No definition available",
-      noWords: "No words saved yet.<br>Tap any word to add it.",
+      noWords: "No words saved yet.<br>Tap a word in a sentence, then tap the star.",
       lvl_elementary: "Elementary", lvl_intermediate: "Intermediate", lvl_advanced: "Advanced",
-      personalizeTitle: "Personalization", accentLabel: "English Accent", accentUs: "US", accentUk: "UK",
+      accentLabel: "Accent", accentUs: "US", accentUk: "UK",
       voiceLabel: "Voice", voiceDefault: "Auto (Recommended)", voiceLoading: "Loading voices…", voicePreviewTitle: "Preview Voice",
+      voiceHint: "Used only when a sentence has no recorded audio.",
       installTitle: "Install App",
       installDescNative: "Add this app to your home screen for a faster fullscreen experience.",
       installDescIosSafari: "Tap Share, then choose Add to Home Screen.",
@@ -44,65 +96,79 @@
       installNow: "Install Now",
       installLater: "Later",
       language: "Language",
-      logout: "Logout",
-      titleTheme: "Toggle Theme",
-      titleMore: "More Options",
-      titleLocate: "Locate Current Sentence",
-      titleTop: "Back to Top",
-      titlePlayer: "Toggle Player",
-      titleTrans: "Toggle EN/CN",
-      titleFont: "Font Size"
+      logout: "Log out",
+      titleMode: "Play mode", titlePrev: "Previous", titleNext: "Next", titlePlay: "Play / Pause", titleSpeed: "Speed"
     },
     zh: {
-      type: "类型", all: "全部", category: "分类句型", dialogue: "对话文章",
-      level: "难度等级", speed: "语速调节", mode: "播放模式", sequential: "顺序播放", loop: "单句循环",
-      sentences: "语句列表", statsTitle: "学习统计", wordbookTitle: "生词本",
-      selectPrompt: "请选择一个句子开始练习",
-      statsSentences: "已学句子数", statsWords: "已存单词数",
-      statsTotal: "总句子数", statsDict: "词典总词汇",
+      allTopics: "全部话题", topicsTitle: "选择话题", topicsSub: "挑一个场景开始练习",
+      sceneDaily: "日常生活", sceneBusiness: "职场商务",
+      allLevels: "全部难度", levelTitle: "难度",
+      unitSentences: n => `${n} 句`,
+      unitTopics: n => `${n} 个话题`,
+      speedTitle: "语速",
+      speedNames: { 0.5: "很慢", 0.75: "慢速", 1: "正常", 1.25: "稍快", 1.5: "很快" },
+      speedNext: v => `${v}× 从下一句开始生效`,
+      sequential: "顺序播放", loop: "单句循环",
+      backToCurrent: "回到当前句",
+      replay: "重播", translation: "译文",
+      emptyList: "这里还没有句子", emptyAction: "查看全部难度",
+      tipWord: "提示：点按高亮句子里的单词即可查词",
+      menuTitle: "我的", profileSub: "每天听一点，耳朵会记住",
+      statsPlayed: "练习句次", statsWords: "收藏生词", statsTotal: "句库总量",
+      groupListening: "听力", groupDisplay: "显示",
+      themeLabel: "主题", themeDark: "深色", themeLight: "浅色",
+      fontLabel: "字号",
+      wordbookTitle: "生词本", wordbookCount: n => `已收藏 ${n} 个`,
       noDef: "暂无释义",
-      noWords: "暂无保存的单词。<br>点击任意单词即可添加。",
+      noWords: "还没有收藏单词。<br>点按句子里的单词，再点星标即可收藏。",
       lvl_elementary: "入门级", lvl_intermediate: "进阶级", lvl_advanced: "高级",
-      personalizeTitle: "个性化设置", accentLabel: "英语口音", accentUs: "美音", accentUk: "英音",
+      accentLabel: "口音", accentUs: "美音", accentUk: "英音",
       voiceLabel: "音色", voiceDefault: "自动（推荐）", voiceLoading: "加载音色中…", voicePreviewTitle: "试听音色",
+      voiceHint: "仅在句子没有录制音频时使用系统语音。",
       installTitle: "添加到桌面",
       installDescNative: "将应用添加到桌面，获得更快的全屏使用体验。",
       installDescIosSafari: "点击下方分享按钮，再选择“添加到主屏幕”。",
       installDescIosOther: "请先在 Safari 打开，再点击分享并选择“添加到主屏幕”。",
       installNow: "立即安装",
       installLater: "稍后",
-      language: "中英切换",
+      language: "界面语言",
       logout: "退出登录",
-      titleTheme: "切换主题",
-      titleMore: "更多选项",
-      titleLocate: "定位到当前句子",
-      titleTop: "回到顶部",
-      titlePlayer: "展开/收起播放器",
-      titleTrans: "中英切换",
-      titleFont: "字体大小"
+      titleMode: "播放模式", titlePrev: "上一句", titleNext: "下一句", titlePlay: "播放 / 暂停", titleSpeed: "语速"
     }
+  };
+  const t = key => {
+    const pack = i18n[state.lang] || i18n.en;
+    return pack[key] !== undefined ? pack[key] : i18n.en[key];
   };
 
   const audio = new AudioEngine();
+  let audioCatalog = null;
+
+  function refreshAudioCatalog() {
+    fetch('audio/catalog.json', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (data) audioCatalog = data; })
+      .catch(() => {});
+  }
+  refreshAudioCatalog();
+  setInterval(refreshAudioCatalog, 20000);
+
+  audio.onMediaPrev = () => playPrev();
+  audio.onMediaNext = () => playNext();
+  audio.onPlaybackChange = playing => updatePlayBtn(playing);
 
   // DOM Elements
   const $ = id => document.getElementById(id);
-  const sentenceText = $('sentenceText');
   const sentenceList = $('sentenceList');
   const playIcon = $('playIcon');
-  const miniPlayIcon = $('miniPlayIcon');
   const progressBar = $('progressBar');
-  const cardBadge = $('cardBadge');
-  const sentenceIndex = $('sentenceIndex');
-  const listCount = $('listCount');
   const wordPopup = $('wordPopup');
-  const statsModal = $('statsModal');
-  const wordbookModal = $('wordbookModal');
-  const settingsDrawer = $('settingsDrawer');
-  const settingsOverlay = $('settingsOverlay');
-  const playerSection = $('playerSection');
-  const playerToggleIcon = $('playerToggleIcon');
-  const btnTogglePlayer = $('btnTogglePlayer');
+  const topbar = $('topbar');
+  const dock = $('dock');
+  const topicRail = $('topicRail');
+  const locatePill = $('btnLocate');
+  const scrim = $('scrim');
+  const toastEl = $('toast');
   let deferredInstallPrompt = null;
   let installPromptEl = null;
   const INSTALL_DISMISS_KEY = 'lp_install_prompt_dismissed_v1';
@@ -257,100 +323,328 @@
     });
   }
 
+  // ---- Small helpers ----
+  function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, ch => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+    ));
+  }
+
+  function speakerOf(text) {
+    const match = /^\s*([A-Z])\s*[:：]/.exec(text || '');
+    return match ? match[1] : '';
+  }
+
+  let toastTimer = null;
+  function showToast(message, icon, duration = 1800) {
+    if (!toastEl) return;
+    toastEl.innerHTML = `${icon ? `<i class="${icon}"></i>` : ''}<span>${escapeHtml(message)}</span>`;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), duration);
+  }
+
+  function maybeShowWordTip() {
+    if (localStorage.getItem('lp_tip_word')) return;
+    localStorage.setItem('lp_tip_word', '1');
+    setTimeout(() => showToast(t('tipWord'), 'ri-lightbulb-flash-line', 4200), 700);
+  }
+
+  function topicName(topic) {
+    if (!topic) return t('allTopics');
+    return topic.name[state.lang] || topic.name.en;
+  }
+
+  function topicAltName(topic) {
+    // Subtitle in the other language doubles as a light vocabulary hint.
+    if (!topic) return '';
+    return state.lang === 'zh' ? topic.name.en : topic.name.zh;
+  }
+
+  function sentencesInTopic(topicId) {
+    return topicId === 'all' ? state.sentences : state.sentences.filter(s => topicOf(s) === topicId);
+  }
+
   // ---- Filter Logic ----
   function applyFilters() {
-    const isCategoryParent = s => s.type === 'category' && (s.parentId === undefined || s.parentId === null);
-    state.filtered = state.sentences.filter(s => {
-      const typeMatch = state.typeFilter === 'all' || s.type === state.typeFilter;
-      const levelMatch = state.levelFilter === 'all' || s.level === state.levelFilter;
-      const hideParentInAll = state.typeFilter === 'all' && isCategoryParent(s);
-      return typeMatch && levelMatch && !hideParentInAll;
-    });
-
-    renderList(true);
-    if (state.currentIndex >= state.filtered.length) {
-      state.currentIndex = state.filtered.length > 0 ? 0 : -1;
-    }
-    if (state.filtered.length > 0 && state.currentIndex === -1) {
-      state.currentIndex = 0;
-    }
-    updateDisplay();
+    state.filtered = sentencesInTopic(state.topic)
+      .filter(s => state.levelFilter === 'all' || s.level === state.levelFilter);
+    state.currentIndex = state.filtered.length > 0 ? 0 : -1;
+    renderList(true, true);
+    renderTopicHead();
+    updateDisplay('none');
   }
 
-  function setupFilters() {
-    document.querySelectorAll('#typeFilter .seg-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#typeFilter .seg-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.typeFilter = btn.dataset.value;
-        state.currentIndex = -1;
-        audio.stop();
-        updatePlayBtn(false);
-        applyFilters();
-      });
-    });
-    document.querySelectorAll('#levelFilter .seg-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#levelFilter .seg-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.levelFilter = btn.dataset.value;
-        state.currentIndex = -1;
-        audio.stop();
-        updatePlayBtn(false);
-        applyFilters();
-      });
-    });
+  function stopForFilterChange() {
+    audio.stop();
+    clearLoopTimer();
+    updatePlayBtn(false);
+    closeWordPopup();
+    closePopover();
   }
 
-  // ---- Render Sentence List (Lazy Loading) ----
+  function setTopic(topicId) {
+    if (topicId !== 'all' && !topicById(topicId)) topicId = 'all';
+    if (topicId === state.topic) return false;
+    state.topic = topicId;
+    localStorage.setItem('lp_topic', topicId);
+    // Keep the chosen level if the new topic has it; otherwise fall back to all levels.
+    if (state.levelFilter !== 'all' && !sentencesInTopic(topicId).some(s => s.level === state.levelFilter)) {
+      state.levelFilter = 'all';
+      localStorage.setItem('lp_level', 'all');
+    }
+    renderTopicRail();
+    stopForFilterChange();
+    applyFilters();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    return true;
+  }
+
+  function setLevel(level) {
+    if (level !== 'all' && !LEVELS.includes(level)) level = 'all';
+    if (level === state.levelFilter) return;
+    state.levelFilter = level;
+    localStorage.setItem('lp_level', level);
+    stopForFilterChange();
+    applyFilters();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
+  // ---- Topic Rail / Head / Sheet ----
+  function renderTopicRail() {
+    if (!topicRail) return;
+    const chip = (id, icon, hue, label) => {
+      const active = state.topic === id;
+      return `<button class="chip${active ? ' active' : ''}" role="tab" aria-selected="${active}" data-topic="${id}" style="--h:${hue}"><i class="${icon}"></i>${escapeHtml(label)}</button>`;
+    };
+    let html = chip('all', 'ri-stack-line', 258, t('allTopics'));
+    let lastScene = null;
+    visibleTopics.forEach(topic => {
+      if (lastScene && topic.scene !== lastScene) html += '<span class="chip-divider" aria-hidden="true"></span>';
+      lastScene = topic.scene;
+      html += chip(topic.id, topic.icon, topic.hue, topicName(topic));
+    });
+    topicRail.innerHTML = html;
+  }
+
+  function scrollActiveChipIntoView(smooth = false) {
+    const active = topicRail && topicRail.querySelector('.chip.active');
+    if (!active) return;
+    const railRect = topicRail.getBoundingClientRect();
+    const chipRect = active.getBoundingClientRect();
+    const delta = (chipRect.left + chipRect.width / 2) - (railRect.left + railRect.width / 2);
+    topicRail.scrollBy({ left: delta, behavior: smooth ? 'smooth' : 'auto' });
+  }
+
+  function renderTopicHead() {
+    const topic = state.topic === 'all' ? null : topicById(state.topic);
+    $('topicHead').style.setProperty('--h', topic ? topic.hue : 258);
+    $('topicHeadIcon').innerHTML = `<i class="${topic ? topic.icon : 'ri-stack-line'}"></i>`;
+    $('topicTitle').textContent = topicName(topic);
+    const count = t('unitSentences')(state.filtered.length);
+    $('topicMeta').textContent = topic
+      ? `${topicAltName(topic)} · ${count}`
+      : `${t('unitTopics')(visibleTopics.length)} · ${count}`;
+    $('levelLabel').textContent = state.levelFilter === 'all' ? t('allLevels') : LEVEL_CEFR[state.levelFilter];
+    $('levelDot').className = `lvl-dot ${state.levelFilter === 'all' ? '' : state.levelFilter}`;
+  }
+
+  function renderTopicSheet() {
+    const check = '<i class="ri-checkbox-circle-fill"></i>';
+    const card = topic => {
+      const active = state.topic === topic.id;
+      return `
+        <button class="topic-card${active ? ' active' : ''}" data-topic="${topic.id}" style="--h:${topic.hue}">
+          <span class="tc-icon"><i class="${topic.icon}"></i></span>
+          <span class="tc-name">${escapeHtml(topicName(topic))}</span>
+          <span class="tc-sub">${escapeHtml(topicAltName(topic))}</span>
+          <span class="tc-count">${active ? check : topicCounts[topic.id]}</span>
+        </button>`;
+    };
+    const allActive = state.topic === 'all';
+    let html = `
+      <button class="topic-card-all${allActive ? ' active' : ''}" data-topic="all">
+        <span class="tc-icon"><i class="ri-stack-line"></i></span>
+        <span class="tc-text">
+          <span class="tc-name">${escapeHtml(t('allTopics'))}</span>
+          <span class="tc-sub">${t('unitTopics')(visibleTopics.length)} · ${t('unitSentences')(state.sentences.length)}</span>
+        </span>
+        <span class="tc-count">${allActive ? check : ''}</span>
+      </button>`;
+    const groups = [
+      { label: t('sceneDaily'), items: visibleTopics.filter(tp => tp.scene !== 'business') },
+      { label: t('sceneBusiness'), items: visibleTopics.filter(tp => tp.scene === 'business') }
+    ];
+    groups.forEach(group => {
+      if (!group.items.length) return;
+      html += `<h3 class="sheet-group">${escapeHtml(group.label)}</h3><div class="topic-grid">${group.items.map(card).join('')}</div>`;
+    });
+    $('topicSheetBody').innerHTML = html;
+  }
+
+  // ---- Popovers (speed, level) ----
+  let openPopoverState = null;
+
+  function closePopover() {
+    if (!openPopoverState) return;
+    openPopoverState.el.classList.remove('show');
+    openPopoverState.anchor.setAttribute('aria-expanded', 'false');
+    openPopoverState = null;
+  }
+
+  function openPopover(el, anchor, placement) {
+    if (openPopoverState && openPopoverState.el === el) {
+      closePopover();
+      return;
+    }
+    closePopover();
+    const rect = anchor.getBoundingClientRect();
+    el.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`;
+    el.style.left = 'auto';
+    if (placement === 'above') {
+      el.style.top = 'auto';
+      el.style.bottom = `${window.innerHeight - rect.top + 12}px`;
+      el.style.setProperty('--origin', 'bottom right');
+    } else {
+      el.style.bottom = 'auto';
+      el.style.top = `${rect.bottom + 8}px`;
+      el.style.setProperty('--origin', 'top right');
+    }
+    el.classList.add('show');
+    anchor.setAttribute('aria-expanded', 'true');
+    openPopoverState = { el, anchor };
+  }
+
+  function renderSpeedPopover() {
+    const names = t('speedNames');
+    $('speedPopover').innerHTML = `<div class="pop-title">${escapeHtml(t('speedTitle'))}</div>` + SPEEDS.map(v => {
+      const active = v === state.speed;
+      return `
+        <button class="pop-item${active ? ' active' : ''}" role="menuitemradio" aria-checked="${active}" data-speed="${v}">
+          <b>${v}×</b><span>${escapeHtml(names[v] || '')}</span>
+          <span class="pop-meta">${active ? '<i class="ri-check-line"></i>' : ''}</span>
+        </button>`;
+    }).join('');
+  }
+
+  function renderLevelPopover() {
+    const pool = sentencesInTopic(state.topic);
+    const counts = { all: pool.length };
+    LEVELS.forEach(level => { counts[level] = pool.filter(s => s.level === level).length; });
+    const item = level => {
+      const active = state.levelFilter === level;
+      const label = level === 'all' ? t('allLevels') : `${LEVEL_CEFR[level]} · ${t('lvl_' + level)}`;
+      return `
+        <button class="pop-item${active ? ' active' : ''}" role="menuitemradio" aria-checked="${active}" data-level="${level}"${counts[level] ? '' : ' disabled'}>
+          <span class="lvl-dot ${level === 'all' ? '' : level}"></span>
+          <span>${escapeHtml(label)}</span>
+          <span class="pop-meta">${counts[level]}</span>
+        </button>`;
+    };
+    $('levelPopover').innerHTML = `<div class="pop-title">${escapeHtml(t('levelTitle'))}</div>` + ['all', ...LEVELS].map(item).join('');
+  }
+
+  // ---- Render Conversation (Lazy Loading) ----
   let listObserver = null;
   const LIST_BATCH_SIZE = 50;
+  let activeEl = null;
+  let enterTimer = null;
 
-  function renderList(reset = true) {
+  function buildWordsHtml(text) {
+    return (text || '').split(/\s+/).filter(Boolean).map(token => {
+      const clean = token.replace(/[^a-zA-Z'-]/g, '').replace(/^['-]+|['-]+$/g, '').toLowerCase();
+      if (!clean) return escapeHtml(token);
+      return `<span class="word" data-word="${escapeHtml(clean)}">${escapeHtml(token)}</span>`;
+    }).join(' ');
+  }
+
+  function renderMsg(li, s, index, isActive) {
+    const speaker = speakerOf(s.text);
+    const text = stripSpeakerLabel(s.text);
+    li.className = `msg side-${speaker === 'B' ? 'b' : 'a'}${isActive ? ' active' : ''}`;
+    li.dataset.index = index;
+    const avatar = `<span class="msg-avatar" aria-hidden="true">${speaker || '•'}</span>`;
+    if (!isActive) {
+      li.innerHTML = `${avatar}<div class="msg-bubble"><p class="msg-text">${escapeHtml(text)}</p></div>`;
+      return;
+    }
+    li.innerHTML = `${avatar}
+      <div class="msg-bubble">
+        <p class="msg-text">${buildWordsHtml(text)}</p>
+        ${state.showCn && s.cn ? `<p class="msg-cn">${escapeHtml(stripSpeakerLabel(s.cn))}</p>` : ''}
+        <div class="msg-tools">
+          <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>${index + 1} / ${state.filtered.length}</span>
+          <span class="msg-level ${s.level}">${LEVEL_CEFR[s.level] || escapeHtml(s.level)}</span>
+          <span class="spacer"></span>
+          <button class="msg-tool" data-action="replay" title="${escapeHtml(t('replay'))}" aria-label="${escapeHtml(t('replay'))}"><i class="ri-restart-line"></i></button>
+          <button class="msg-tool${state.showCn ? ' on' : ''}" data-action="cn" title="${escapeHtml(t('translation'))}" aria-label="${escapeHtml(t('translation'))}" aria-pressed="${state.showCn}"><i class="ri-translate-2"></i></button>
+        </div>
+      </div>`;
+  }
+
+  function toggleActiveTranslation() {
+    state.showCn = !state.showCn;
+    localStorage.setItem('lp_showCn', state.showCn);
+    if (!activeEl) return;
+    // Patch in place so the bubble does not replay its entrance animation.
+    const s = state.filtered[state.currentIndex];
+    const bubble = activeEl.querySelector('.msg-bubble');
+    const existing = bubble && bubble.querySelector('.msg-cn');
+    if (existing) existing.remove();
+    if (bubble && state.showCn && s && s.cn) {
+      const p = document.createElement('p');
+      p.className = 'msg-cn';
+      p.textContent = stripSpeakerLabel(s.cn);
+      bubble.insertBefore(p, bubble.querySelector('.msg-tools'));
+    }
+    const btn = activeEl.querySelector('[data-action="cn"]');
+    if (btn) {
+      btn.classList.toggle('on', state.showCn);
+      btn.setAttribute('aria-pressed', String(state.showCn));
+    }
+  }
+
+  function renderList(reset = true, animate = false) {
     if (reset) {
       sentenceList.innerHTML = '';
       state.renderedCount = 0;
+      activeEl = null;
       if (listObserver) {
         listObserver.disconnect();
         listObserver = null;
+      }
+      if (state.filtered.length === 0) {
+        const action = state.levelFilter !== 'all'
+          ? `<br><button type="button" data-action="reset-level">${escapeHtml(t('emptyAction'))}</button>`
+          : '';
+        sentenceList.innerHTML = `<li class="convo-empty"><i class="ri-chat-off-line"></i>${escapeHtml(t('emptyList'))}${action}</li>`;
+        return;
+      }
+      if (animate) {
+        sentenceList.classList.remove('entering');
+        void sentenceList.offsetWidth;
+        sentenceList.classList.add('entering');
+        clearTimeout(enterTimer);
+        enterTimer = setTimeout(() => sentenceList.classList.remove('entering'), 900);
       }
     }
 
     const start = state.renderedCount;
     const end = Math.min(start + LIST_BATCH_SIZE, state.filtered.length);
-    
-    if (start >= state.filtered.length) {
-      listCount.textContent = state.filtered.length;
-      return;
-    }
+    if (start >= state.filtered.length) return;
 
     const fragment = document.createDocumentFragment();
     for (let i = start; i < end; i++) {
-      const s = state.filtered[i];
       const li = document.createElement('li');
-      li.className = `sentence-item${i === state.currentIndex ? ' active' : ''}`;
-      li.dataset.index = i;
-      
-      const numSpan = document.createElement('span');
-      numSpan.className = 'num';
-      numSpan.textContent = i + 1;
-      
-      const textSpan = document.createElement('span');
-      textSpan.className = 'text';
-      textSpan.textContent = s.text;
-      
-      const dotSpan = document.createElement('span');
-      dotSpan.className = `level-dot ${s.level}`;
-      
-      li.appendChild(numSpan);
-      li.appendChild(textSpan);
-      li.appendChild(dotSpan);
+      const isActive = i === state.currentIndex;
+      renderMsg(li, state.filtered[i], i, isActive);
+      if (isActive) activeEl = li;
+      if (i < 14) li.style.setProperty('--i', i);
       fragment.appendChild(li);
     }
-    
     sentenceList.appendChild(fragment);
     state.renderedCount = end;
-    listCount.textContent = state.filtered.length;
 
     // Setup intersection observer for next batch
     if (end < state.filtered.length) {
@@ -360,7 +654,7 @@
             listObserver.unobserve(entries[0].target);
             renderList(false);
           }
-        }, { rootMargin: '300px' });
+        }, { rootMargin: '400px' });
       } else {
         listObserver.disconnect();
       }
@@ -378,76 +672,77 @@
     }
   }
 
-  // ---- Display Current Sentence ----
-  function updateDisplay() {
-    if (state.currentIndex < 0 || state.filtered.length === 0) {
-      sentenceText.innerHTML = i18n[state.lang].selectPrompt;
-      sentenceText.style.fontSize = state.fontSize + 'px';
-      cardBadge.textContent = '—';
-      sentenceIndex.textContent = '0 / 0';
+  // ---- Follow the current sentence (lyrics-style) ----
+  // 'soft'  : sequential advance; skipped for a few seconds after the user scrolls by hand
+  // 'nav'   : prev / next / returning to the app; scrolls only if the line is out of the comfort zone
+  // 'force' : the "now playing" pill; always centres the line
+  let lastUserScrollAt = 0;
+
+  function visibleBand() {
+    const top = topbar ? topbar.getBoundingClientRect().bottom : 0;
+    const bottom = dock ? dock.getBoundingClientRect().top : window.innerHeight;
+    return { top, bottom };
+  }
+
+  function followActive(mode = 'soft') {
+    if (!activeEl || !activeEl.isConnected || document.hidden) return;
+    if (mode === 'soft' && Date.now() - lastUserScrollAt < 6000) return;
+    const { top, bottom } = visibleBand();
+    const rect = activeEl.getBoundingClientRect();
+    const comfortable = rect.top >= top + 12 && rect.bottom <= top + (bottom - top) * 0.78;
+    if (mode !== 'force' && comfortable) return;
+    const target = window.scrollY + rect.top + rect.height / 2 - (top + (bottom - top) / 2);
+    window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+  }
+
+  function updateLocatePill() {
+    if (!locatePill) return;
+    if (!activeEl || !activeEl.isConnected || document.body.classList.contains('sheet-open')) {
+      locatePill.classList.remove('show');
       return;
     }
-    const s = state.filtered[state.currentIndex];
-    
+    const { top, bottom } = visibleBand();
+    const rect = activeEl.getBoundingClientRect();
+    const above = rect.bottom < top + 8;
+    const below = rect.top > bottom - 8;
+    locatePill.classList.toggle('show', above || below);
+    $('locateIcon').className = above ? 'ri-arrow-up-line' : 'ri-arrow-down-line';
+  }
+
+  // ---- Display Current Sentence ----
+  function updateDisplay(follow = 'soft') {
+    if (state.currentIndex < 0 || state.filtered.length === 0) {
+      activeEl = null;
+      updateLocatePill();
+      return;
+    }
     ensureIndexRendered(state.currentIndex);
-    
-    if (state.showCn) {
-      sentenceText.innerHTML = s.cn;
-    } else {
-      // Wrap words for click interaction
-      const words = s.text.replace(/[.,!?;:'"]/g, m => `<span class="punct">${m}</span>`).split(/\s+/);
-      sentenceText.innerHTML = s.text.split(/\s+/).map(w => {
-        const clean = w.replace(/[^a-zA-Z'-]/g, '').toLowerCase();
-        return `<span class="word" data-word="${clean}">${w}</span>`;
-      }).join(' ');
+    const li = sentenceList.children[state.currentIndex];
+    if (activeEl && activeEl !== li && activeEl.isConnected) {
+      const prevIndex = parseInt(activeEl.dataset.index, 10);
+      if (state.filtered[prevIndex]) renderMsg(activeEl, state.filtered[prevIndex], prevIndex, false);
     }
-    
-    sentenceText.style.fontSize = state.fontSize + 'px';
-
-    const levelNames = { 
-      elementary: i18n[state.lang].lvl_elementary, 
-      intermediate: i18n[state.lang].lvl_intermediate, 
-      advanced: i18n[state.lang].lvl_advanced 
-    };
-    cardBadge.textContent = levelNames[s.level] || s.level;
-    cardBadge.style.background = s.level === 'elementary' ? 'var(--accent)' : s.level === 'intermediate' ? '#f9c74f' : 'var(--accent2)';
-    sentenceIndex.textContent = `${state.currentIndex + 1} / ${state.filtered.length}`;
-
-    // Highlight active in list
-    const activeItem = sentenceList.querySelector('.sentence-item.active');
-    if (activeItem) activeItem.classList.remove('active');
-    if (state.currentIndex >= 0 && sentenceList.children[state.currentIndex]) {
-      sentenceList.children[state.currentIndex].classList.add('active');
+    if (li && li !== activeEl) {
+      renderMsg(li, state.filtered[state.currentIndex], state.currentIndex, true);
     }
-    // // Scroll active item into view
-    // const activeItem = sentenceList.querySelector('.sentence-item.active');
-    // if (activeItem) activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    // Wire up word clicks if in English mode
-    if (!state.showCn) {
-      sentenceText.querySelectorAll('.word').forEach(el => {
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          showWordPopup(el.dataset.word);
-        });
-      });
-    }
+    activeEl = li || null;
+    if (follow !== 'none') followActive(follow);
+    updateLocatePill();
   }
 
   // ---- Select Sentence ----
   function selectSentence(index) {
     audio.stop();
     clearLoopTimer();
+    closeWordPopup();
     state.currentIndex = index;
-    updateDisplay();
+    updateDisplay('none');
     updatePlayBtn(false);
     playCurrent();
   }
 
   // ---- Play Controls ----
   function getSelectedSpeed() {
-    const activeBtn = document.querySelector('#speedControl .speed-btn.active');
-    const activeSpeed = activeBtn ? parseFloat(activeBtn.dataset.speed) : NaN;
-    if (Number.isFinite(activeSpeed)) return activeSpeed;
     return Number.isFinite(state.speed) ? state.speed : 1;
   }
 
@@ -513,12 +808,17 @@
     });
   }
 
+  function stripSpeakerLabel(text) {
+    // Dialogue lines start with a role marker ("A: ..." / "B：..."). Show it, but don't speak it.
+    return (text || '').replace(/^\s*[A-Z]\s*[:：]\s*/, '');
+  }
+
   function buildWordByWordStream(text) {
     return ((text || '').match(/[A-Za-z]+(?:['-][A-Za-z]+)*|[.,!?;:]/g) || []);
   }
 
   function speakWordByWordLikeSentence(text, rate, onEnd, index = 0, tokens = null) {
-    const stream = tokens || buildWordByWordStream(normalizeJoinedLetterSpeech(text));
+    const stream = tokens || buildWordByWordStream(normalizeJoinedLetterSpeech(stripSpeakerLabel(text)));
     if (index >= stream.length) {
       onEnd();
       return;
@@ -533,7 +833,7 @@
     const speakToken = lowerToken === 'a' ? 'uh' : (lowerToken === 'i' ? 'eye' : token);
     // Use the given rate uniformly; avoid extra slowdown that causes swallowed sounds
     const tokenRate = Math.max(0.45, rate);
-    audio.onProgress = pct => { progressBar.style.width = pct + '%'; };
+    audio.onProgress = setProgress;
     audio.speak(speakToken, () => {
       speakWordByWordLikeSentence(text, rate, onEnd, index + 1, stream);
       updatePlayBtn(true);
@@ -542,6 +842,67 @@
 
   function normalizeStandaloneArticleA(text) {
     return (text || '').replace(/\ba(?=\s*[.!?,;:]?\s*$)/gi, 'uh');
+  }
+
+  function wordClipSlug(token) {
+    const lower = String(token || '').toLowerCase();
+    const spoken = lower === 'a' ? 'uh' : (lower === 'i' ? 'eye' : lower);
+    return spoken.replace(/[^a-z0-9-]+/g, '') || 'word';
+  }
+
+  function catalogHas(list, value) {
+    return Array.isArray(list) && list.some(item => String(item) === String(value));
+  }
+
+  function canPlaySentenceFromFile(sentence) {
+    if (!audioCatalog) return false;
+    const enKey = state.accent === 'uk' ? 'en-gb' : 'en-us';
+    return catalogHas(audioCatalog[enKey], sentence.id) && catalogHas(audioCatalog.zh, sentence.id);
+  }
+
+  function buildMediaTracks(sentence, rates) {
+    const enKey = state.accent === 'uk' ? 'en-gb' : 'en-us';
+    const enSrc = `audio/${enKey}/${sentence.id}.m4a?v=2`;
+    const zhSrc = `audio/zh/${sentence.id}.m4a?v=2`;
+    const gap = 'audio/ui/gap-pass.m4a';
+    const title = sentence.text;
+    const tracks = [];
+    const addSpeech = (src, rate) => tracks.push({ src, rate, title, critical: true });
+
+    // One read per play: English, a short gap, then the Chinese translation.
+    addSpeech(enSrc, rates.first);
+    tracks.push({ src: gap, rate: 1, title });
+    tracks.push({
+      src: zhSrc,
+      rate: rates.chinese,
+      title: sentence.cn || sentence.text,
+      critical: true
+    });
+    tracks.push({ src: 'audio/ui/gap-sentence.m4a', rate: 1, title });
+    return tracks;
+  }
+
+  // Called when one read of the current line finishes (file or speech).
+  // Repeats the line until the chosen count is reached, then moves to the next line.
+  function handleSentenceEnd(viaSpeech) {
+    state.playsDone++;
+    const run = fn => {
+      if (viaSpeech) state.loopTimer = setTimeout(fn, 2600);
+      else fn();
+    };
+    if (state.repeat === 0 || state.playsDone < state.repeat) {
+      run(() => playCurrent('repeat'));
+      updatePlayBtn(true);
+      return;
+    }
+    if (state.currentIndex < state.filtered.length - 1) {
+      state.currentIndex++;
+      updateDisplay();
+      run(() => playCurrent('sequential'));
+      updatePlayBtn(true);
+      return;
+    }
+    updatePlayBtn(false);
   }
 
   function playPasses(passes, onEnd, index = 0) {
@@ -562,8 +923,8 @@
       speakWordByWordLikeSentence(pass.text, pass.rate, handlePassEnd);
       return;
     }
-    audio.onProgress = pct => { progressBar.style.width = pct + '%'; };
-    let spokenText = normalizeJoinedLetterSpeech(pass.text);
+    audio.onProgress = setProgress;
+    let spokenText = normalizeJoinedLetterSpeech(stripSpeakerLabel(pass.text));
     if (pass.normalizeA) spokenText = normalizeStandaloneArticleA(spokenText);
     if (pass.clearSpeech) spokenText = buildClearEnglishSpeechText(spokenText);
     audio.speak(spokenText, handlePassEnd, { lang: pass.lang, rate: pass.rate, pitch: pass.pitch || 1, volume: pass.volume || 1, voiceVariant: pass.voiceVariant });
@@ -583,41 +944,32 @@
     }
     audio.setRate(state.speed);
     const rates = getPlaybackRates(state.speed);
-    const isCategoryParent = s.type === 'category' && (s.parentId === undefined || s.parentId === null);
-    const passes = isCategoryParent
-      ? [
-          { text: s.text, lang: getEnglishLang(), rate: rates.first, pitch: 1.1, normalizeA: true, clearSpeech: true, voiceVariant: state.accent },
-          { text: s.cn || s.text, lang: 'zh-CN', rate: rates.chinese, pitch: 1.05, volume: 1 }
-        ]
-      : [
-        // Pass 1: natural fluency at user-selected speed
-        { text: s.text, lang: getEnglishLang(), rate: rates.first,  pitch: 1.1, clearSpeech: true, voiceVariant: state.accent },
-        // Pass 2: moderately slowed, full sentence — clearer phrasing
-        { text: s.text, lang: getEnglishLang(), rate: rates.second, pitch: 1.1, clearSpeech: true, voiceVariant: state.accent },
-        // Pass 3: word-by-word, deliberate & clear
-        { text: s.text, lang: getEnglishLang(), rate: rates.third,  pitch: 1.1, mode: 'word_by_word', voiceVariant: state.accent },
-        // Pass 4: Chinese translation
-        { text: s.cn || s.text, lang: 'zh-CN', rate: rates.chinese, pitch: 1.05, volume: 1 }
-      ];
+    // Repeats keep their count; any fresh start (tap, prev/next, play) begins at zero.
+    if (playReason !== 'repeat' && playReason !== 'loop') state.playsDone = 0;
+    const passes = [
+      { text: s.text, lang: getEnglishLang(), rate: rates.first, pitch: 1.1, clearSpeech: true, voiceVariant: state.accent },
+      { text: s.cn || s.text, lang: 'zh-CN', rate: rates.chinese, pitch: 1.05, volume: 1 }
+    ];
 
     const startSpeaking = () => {
-      playPasses(passes, () => {
-        updatePlayBtn(false);
-        if (state.playMode === 'loop') {
-          state.loopTimer = setTimeout(() => playCurrent('loop'), 2600);
-          updatePlayBtn(true);
-          return;
-        }
-        if (state.playMode === 'sequential' && state.currentIndex < state.filtered.length - 1) {
-          state.currentIndex++;
-          updateDisplay();
-          state.loopTimer = setTimeout(() => playCurrent('sequential'), 2600);
-          updatePlayBtn(true);
-        }
-      });
+      playPasses(passes, () => handleSentenceEnd(true));
     };
 
-    if (playReason === 'initial' || playReason === 'sequential') {
+    if (canPlaySentenceFromFile(s)) {
+      const tracks = buildMediaTracks(s, rates);
+      if (playReason === 'initial') {
+        tracks.unshift({ src: 'audio/ui/prompt.m4a', rate: 1, title: s.text });
+      }
+      audio.onProgress = setProgress;
+      audio.playQueue(tracks, {
+        onEnd: () => handleSentenceEnd(false),
+        onFallback: startSpeaking
+      });
+      updatePlayBtn(true);
+      return;
+    }
+
+    if (playReason === 'initial') {
       audio.playPromptSound(startSpeaking);
     } else {
       startSpeaking();
@@ -627,20 +979,33 @@
 
   function togglePlay() {
     if (audio.isPlaying) {
-      audio.stop();
-      clearLoopTimer();
+      if (audio.hasMediaQueue()) {
+        audio.pause();
+      } else {
+        audio.stop();
+        clearLoopTimer();
+      }
       updatePlayBtn(false);
-    } else {
-      if (state.currentIndex < 0 && state.filtered.length > 0) state.currentIndex = 0;
-      updateDisplay();
-      playCurrent();
+      return;
     }
+    if (audio.isPaused && audio.hasMediaQueue()) {
+      audio.resume();
+      updatePlayBtn(true);
+      return;
+    }
+    if (state.currentIndex < 0 && state.filtered.length > 0) state.currentIndex = 0;
+    updateDisplay();
+    playCurrent();
   }
 
   function updatePlayBtn(playing) {
-    const iconClass = playing ? 'ri-pause-fill' : 'ri-play-fill';
-    playIcon.className = iconClass;
-    if (miniPlayIcon) miniPlayIcon.className = iconClass;
+    playIcon.className = playing ? 'ri-pause-fill' : 'ri-play-fill';
+    document.body.classList.toggle('is-playing', !!playing);
+  }
+
+  // Late media events can fire after stop(); only a reset may move the bar then.
+  function setProgress(pct) {
+    if (pct === 0 || audio.isPlaying) progressBar.style.width = pct + '%';
   }
 
   function clearLoopTimer() {
@@ -657,7 +1022,8 @@
     if (state.filtered.length === 0) return;
     audio.stop(); clearLoopTimer();
     state.currentIndex = Math.max(0, state.currentIndex - 1);
-    updateDisplay();
+    closeWordPopup();
+    updateDisplay('nav');
     playCurrent();
   }
 
@@ -665,73 +1031,83 @@
     if (state.filtered.length === 0) return;
     audio.stop(); clearLoopTimer();
     state.currentIndex = Math.min(state.filtered.length - 1, state.currentIndex + 1);
-    updateDisplay();
+    closeWordPopup();
+    updateDisplay('nav');
     playCurrent();
   }
 
   // ---- Speed Control ----
+  function syncSpeedUi() {
+    $('speedLabel').textContent = `${state.speed}×`;
+    renderSpeedPopover();
+  }
+
   function setupSpeed() {
-    const speedButtons = document.querySelectorAll('#speedControl .speed-btn');
-    const allowedSpeeds = Array.from(speedButtons).map(btn => parseFloat(btn.dataset.speed));
-    if (!allowedSpeeds.includes(state.speed)) {
-      state.speed = 1;
-    }
-    speedButtons.forEach(btn => {
-      btn.classList.toggle('active', parseFloat(btn.dataset.speed) === state.speed);
-    });
+    if (!SPEEDS.includes(state.speed)) state.speed = 1;
     audio.setRate(state.speed);
-    document.querySelectorAll('#speedControl .speed-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#speedControl .speed-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.speed = parseFloat(btn.dataset.speed);
-        audio.setRate(state.speed);
-        localStorage.setItem('lp_speed', state.speed);
-      });
+    syncSpeedUi();
+    $('btnSpeed').addEventListener('click', e => {
+      e.stopPropagation();
+      renderSpeedPopover();
+      openPopover($('speedPopover'), $('btnSpeed'), 'above');
+    });
+    $('speedPopover').addEventListener('click', e => {
+      const item = e.target.closest('[data-speed]');
+      if (!item) return;
+      e.stopPropagation();
+      const next = parseFloat(item.dataset.speed);
+      closePopover();
+      if (next === state.speed) return;
+      state.speed = next;
+      audio.setRate(state.speed);
+      localStorage.setItem('lp_speed', state.speed);
+      syncSpeedUi();
+      // Rates are fixed when a sentence starts, so a change mid-sentence lands on the next one.
+      showToast(audio.isPlaying ? t('speedNext')(state.speed) : `${t('speedTitle')} ${state.speed}×`, 'ri-speed-line');
     });
   }
 
   // ---- Play Mode ----
+  function syncModeUi() {
+    const loop = state.playMode === 'loop';
+    const btn = $('btnMode');
+    $('modeIcon').className = loop ? 'ri-repeat-one-line' : 'ri-order-play-line';
+    btn.classList.toggle('on', loop);
+    btn.setAttribute('aria-pressed', String(loop));
+    btn.title = loop ? t('loop') : t('sequential');
+    btn.setAttribute('aria-label', btn.title);
+  }
+
   function setupPlayMode() {
-    document.querySelectorAll('#playMode .seg-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#playMode .seg-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.playMode = btn.dataset.value;
-      });
+    syncModeUi();
+    $('btnMode').addEventListener('click', () => {
+      state.playMode = state.playMode === 'loop' ? 'sequential' : 'loop';
+      localStorage.setItem('lp_playMode', state.playMode);
+      syncModeUi();
+      const loop = state.playMode === 'loop';
+      showToast(loop ? t('loop') : t('sequential'), loop ? 'ri-repeat-one-line' : 'ri-order-play-line');
     });
   }
 
   // ---- Font Size ----
-  function setupFontSize() {
-    $('btnFontSize').addEventListener('click', () => {
-      state.fontSize = state.fontSize >= 24 ? 14 : state.fontSize + 2;
-      sentenceText.style.fontSize = state.fontSize + 'px';
-      localStorage.setItem('lp_fontSize', state.fontSize);
-    });
+  function applyFontSize() {
+    const size = Number.isFinite(state.fontSize) ? state.fontSize : 18;
+    state.fontSize = Math.min(FONT_MAX, Math.max(FONT_MIN, size));
+    document.documentElement.style.setProperty('--fs', `${state.fontSize}px`);
+    $('fontValue').textContent = state.fontSize;
+    $('btnFontDown').disabled = state.fontSize <= FONT_MIN;
+    $('btnFontUp').disabled = state.fontSize >= FONT_MAX;
   }
 
-  // ---- Player Collapse ----
-  function setupPlayerCollapse() {
-    const updatePlayerCollapse = () => {
-      if (state.isPlayerCollapsed) {
-        playerSection.classList.add('collapsed');
-        playerToggleIcon.className = 'ri-arrow-down-s-line';
-        document.body.classList.add('player-collapsed');
-      } else {
-        playerSection.classList.remove('collapsed');
-        playerToggleIcon.className = 'ri-arrow-up-s-line';
-        document.body.classList.remove('player-collapsed');
-      }
+  function setupFontSize() {
+    applyFontSize();
+    const step = delta => {
+      state.fontSize += delta;
+      applyFontSize();
+      localStorage.setItem('lp_fontSize', state.fontSize);
     };
-    
-    updatePlayerCollapse();
-
-    btnTogglePlayer.addEventListener('click', () => {
-      state.isPlayerCollapsed = !state.isPlayerCollapsed;
-      localStorage.setItem('lp_playerCollapsed', state.isPlayerCollapsed);
-      updatePlayerCollapse();
-    });
+    $('btnFontDown').addEventListener('click', () => step(-2));
+    $('btnFontUp').addEventListener('click', () => step(2));
   }
 
   // ---- Dictionary safe access (dictionary.js loads deferred / async) ----
@@ -747,7 +1123,23 @@
   }
 
   // ---- Word Popup ----
-  function showWordPopup(word) {
+  function closeWordPopup() {
+    wordPopup.classList.remove('show');
+    document.body.classList.remove('popup-open');
+    sentenceList.querySelectorAll('.word.looked').forEach(el => el.classList.remove('looked'));
+  }
+
+  function keepActiveAbovePopup() {
+    // Nudge the page so the highlighted line stays readable above the word card.
+    requestAnimationFrame(() => {
+      if (!activeEl || !wordPopup.classList.contains('show')) return;
+      const popupTop = window.innerHeight - wordPopup.offsetHeight;
+      const overlap = activeEl.getBoundingClientRect().bottom - (popupTop - 16);
+      if (overlap > 0) window.scrollBy({ top: overlap, behavior: 'smooth' });
+    });
+  }
+
+  function showWordPopup(word, sourceEl) {
     if (!word) return;
     const dict = getDict();
     const entry = dict ? dict[word] : null;
@@ -755,11 +1147,11 @@
 
     if (entry) {
       renderWordPronunciations(word, entry);
-      $('popupMeaning').innerHTML = `<strong>${entry.pos}</strong> ${entry.cn}`;
-      $('popupExamples').innerHTML = entry.ex.map(e => `<p>• ${e}</p>`).join('');
+      $('popupMeaning').innerHTML = `<strong>${escapeHtml(entry.pos)}</strong> ${escapeHtml(entry.cn)}`;
+      $('popupExamples').innerHTML = (entry.ex || []).map(e => `<p>• ${escapeHtml(e)}</p>`).join('');
     } else {
       renderWordPronunciations(word, null);
-      $('popupMeaning').innerHTML = `<em>${i18n[state.lang].noDef}</em>`;
+      $('popupMeaning').innerHTML = `<em>${t('noDef')}</em>`;
       $('popupExamples').innerHTML = '';
       if (!dict && !window.__dictionaryReady) {
         window.__onDictionaryReady = function () {
@@ -775,11 +1167,18 @@
     $('popupFav').innerHTML = isSaved ? '<i class="ri-star-fill"></i>' : '<i class="ri-star-line"></i>';
     $('popupFav').classList.toggle('saved', isSaved);
 
+    if (sourceEl) {
+      sentenceList.querySelectorAll('.word.looked').forEach(el => el.classList.remove('looked'));
+      sourceEl.classList.add('looked');
+    }
+    closePopover();
+    document.body.classList.add('popup-open');
     wordPopup.classList.add('show');
+    keepActiveAbovePopup();
   }
 
   function setupWordPopup() {
-    $('popupClose').addEventListener('click', () => wordPopup.classList.remove('show'));
+    $('popupClose').addEventListener('click', closeWordPopup);
 
     $('popupFav').addEventListener('click', () => {
       const word = $('popupWord').textContent;
@@ -794,12 +1193,80 @@
         $('popupFav').classList.add('saved');
       }
       localStorage.setItem('lp_wordbook', JSON.stringify(state.wordbook));
+      updateWordbookBadge();
     });
     // Close popup on outside click
+    // composedPath() is captured at dispatch, so it still holds the popup even when a
+    // handler has already swapped out the tapped element (e.g. the star icon).
     document.addEventListener('click', (e) => {
-      if (!wordPopup.contains(e.target) && !e.target.classList.contains('word')) {
-        wordPopup.classList.remove('show');
-      }
+      if (!wordPopup.classList.contains('show')) return;
+      const path = e.composedPath();
+      if (path.includes(wordPopup)) return;
+      if (path.some(node => node.classList && node.classList.contains('word'))) return;
+      closeWordPopup();
+    });
+  }
+
+  // ---- Sheets ----
+  let openSheetEl = null;
+
+  function openSheet(id) {
+    const el = $(id);
+    if (!el) return;
+    closePopover();
+    closeWordPopup();
+    if (openSheetEl && openSheetEl !== el) openSheetEl.classList.remove('show');
+    el.classList.add('show');
+    scrim.classList.add('show');
+    document.body.classList.add('sheet-open');
+    openSheetEl = el;
+    updateLocatePill();
+  }
+
+  function closeSheet() {
+    if (!openSheetEl) return;
+    openSheetEl.classList.remove('show');
+    openSheetEl = null;
+    scrim.classList.remove('show');
+    document.body.classList.remove('sheet-open');
+    const select = $('voiceSelect');
+    if (select) select.classList.remove('open');
+    updateLocatePill();
+  }
+
+  function setupSheets() {
+    scrim.addEventListener('click', closeSheet);
+    document.querySelectorAll('[data-close-sheet]').forEach(btn => btn.addEventListener('click', closeSheet));
+    // Drag the handle or header down to dismiss.
+    document.querySelectorAll('.sheet').forEach(sheet => {
+      let startY = 0;
+      let dy = 0;
+      let dragging = false;
+      const onStart = e => {
+        if (e.target.closest('button')) return;
+        dragging = true;
+        dy = 0;
+        startY = e.touches[0].clientY;
+        sheet.classList.add('dragging');
+      };
+      const onMove = e => {
+        if (!dragging) return;
+        dy = Math.max(0, e.touches[0].clientY - startY);
+        sheet.style.transform = `translate(-50%, ${dy}px)`;
+      };
+      const onEnd = () => {
+        if (!dragging) return;
+        dragging = false;
+        sheet.classList.remove('dragging');
+        sheet.style.transform = '';
+        if (dy > 90) closeSheet();
+      };
+      sheet.querySelectorAll('.sheet-handle, .sheet-head').forEach(zone => {
+        zone.addEventListener('touchstart', onStart, { passive: true });
+      });
+      sheet.addEventListener('touchmove', onMove, { passive: true });
+      sheet.addEventListener('touchend', onEnd);
+      sheet.addEventListener('touchcancel', onEnd);
     });
   }
 
@@ -808,84 +1275,97 @@
     localStorage.setItem('lp_stats', JSON.stringify(state.stats));
   }
 
-  function showStats() {
+  function renderStats() {
     const s = state.stats;
-    $('statsGrid').innerHTML = `
-      <div class="stat-card"><div class="stat-value">${s.sentencesPlayed}</div><div class="stat-label">${i18n[state.lang].statsSentences}</div></div>
-      <div class="stat-card"><div class="stat-value">${state.wordbook.length}</div><div class="stat-label">${i18n[state.lang].statsWords}</div></div>
-      <div class="stat-card"><div class="stat-value">${SENTENCES.length}</div><div class="stat-label">${i18n[state.lang].statsTotal}</div></div>
-      <div class="stat-card"><div class="stat-value">${Object.keys(getDict() || {}).length}</div><div class="stat-label">${i18n[state.lang].statsDict}</div></div>
+    $('statTiles').innerHTML = `
+      <div class="stat-tile"><div class="stat-value">${s.sentencesPlayed || 0}</div><div class="stat-label">${t('statsPlayed')}</div></div>
+      <button class="stat-tile" type="button" data-open="wordbook"><div class="stat-value">${state.wordbook.length}</div><div class="stat-label">${t('statsWords')}<i class="ri-arrow-right-s-line"></i></div></button>
+      <div class="stat-tile"><div class="stat-value">${SENTENCES.length}</div><div class="stat-label">${t('statsTotal')}</div></div>
     `;
-    statsModal.classList.add('show');
   }
 
   // ---- Wordbook ----
-  function showWordbook() {
+  function updateWordbookBadge() {
+    const badge = $('wordbookBadge');
+    const n = state.wordbook.length;
+    badge.hidden = n === 0;
+    badge.textContent = n > 99 ? '99+' : String(n);
+    $('wordbookSub').textContent = t('wordbookCount')(n);
+  }
+
+  function renderWordbook() {
     const list = $('wordbookList');
     if (state.wordbook.length === 0) {
-      list.innerHTML = `<li class="wordbook-empty"><i class="ri-bookmark-line" style="font-size:32px;display:block;margin-bottom:8px"></i>${i18n[state.lang].noWords}</li>`;
-    } else {
-      const dict = getDict() || {};
-      list.innerHTML = state.wordbook.map(w => {
-        const entry = dict[w];
-        const usIpa = getIpaText(entry, 'us');
-        const ukIpa = getIpaText(entry, 'uk');
-        const meaning = entry ? entry.cn : '—';
-        return `
-          <li class="wordbook-item">
-            <div class="wb-header">
-              <span class="wb-word">${w}</span>
-              <button class="wb-remove" data-word="${w}" title="Remove"><i class="ri-delete-bin-line"></i></button>
-            </div>
-            <div class="wb-meaning">${meaning}</div>
-            <div class="popup-pronunciations wb-pronunciations">
-              <button class="pron-btn wb-speak ${state.accent === 'us' ? 'active' : ''}" data-accent="us" data-word="${w}">
-                <div class="pron-top">
-                  <span class="tag">${i18n[state.lang].accentUs}</span>
-                  <i class="ri-volume-up-fill"></i>
-                </div>
-                <span class="ipa">${usIpa || '-'}</span>
-              </button>
-              <button class="pron-btn wb-speak ${state.accent === 'uk' ? 'active' : ''}" data-accent="uk" data-word="${w}">
-                <div class="pron-top">
-                  <span class="tag">${i18n[state.lang].accentUk}</span>
-                  <i class="ri-volume-up-fill"></i>
-                </div>
-                <span class="ipa">${ukIpa || '-'}</span>
-              </button>
-            </div>
-          </li>`;
-      }).join('');
-      
-      list.querySelectorAll('.wb-speak').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const w = btn.dataset.word;
-          const accent = btn.dataset.accent;
-          const wasPlaying = audio.isPlaying;
-          const resumeIndex = state.currentIndex;
-          audio.stop(true);
-          clearLoopTimer();
-          btn.classList.add('speaking');
-          audio.speakWord(w, () => {
-            btn.classList.remove('speaking');
-            if (wasPlaying && resumeIndex === state.currentIndex) {
-              playCurrent('loop');
-              updatePlayBtn(true);
-            }
-          }, { voiceVariant: accent });
-        });
-      });
-
-      list.querySelectorAll('.wb-remove').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const w = btn.dataset.word;
-          state.wordbook = state.wordbook.filter(x => x !== w);
-          localStorage.setItem('lp_wordbook', JSON.stringify(state.wordbook));
-          showWordbook();
-        });
-      });
+      list.innerHTML = `<li class="wordbook-empty"><i class="ri-bookmark-3-line"></i>${t('noWords')}</li>`;
+      return;
     }
-    wordbookModal.classList.add('show');
+    const dict = getDict() || {};
+    list.innerHTML = state.wordbook.map(w => {
+      const entry = dict[w];
+      const usIpa = getIpaText(entry, 'us');
+      const ukIpa = getIpaText(entry, 'uk');
+      const meaning = entry ? entry.cn : '—';
+      const safeWord = escapeHtml(w);
+      return `
+        <li class="wordbook-item">
+          <div class="wb-header">
+            <span class="wb-word">${safeWord}</span>
+            <button class="wb-remove" data-word="${safeWord}" title="Remove"><i class="ri-delete-bin-line"></i></button>
+          </div>
+          <div class="wb-meaning">${escapeHtml(meaning)}</div>
+          <div class="popup-pronunciations wb-pronunciations">
+            <button class="pron-btn wb-speak ${state.accent === 'us' ? 'active' : ''}" data-accent="us" data-word="${safeWord}">
+              <div class="pron-top">
+                <span class="tag">${t('accentUs')}</span>
+                <i class="ri-volume-up-fill"></i>
+              </div>
+              <span class="ipa">${usIpa || '-'}</span>
+            </button>
+            <button class="pron-btn wb-speak ${state.accent === 'uk' ? 'active' : ''}" data-accent="uk" data-word="${safeWord}">
+              <div class="pron-top">
+                <span class="tag">${t('accentUk')}</span>
+                <i class="ri-volume-up-fill"></i>
+              </div>
+              <span class="ipa">${ukIpa || '-'}</span>
+            </button>
+          </div>
+        </li>`;
+    }).join('');
+
+    list.querySelectorAll('.wb-speak').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const w = btn.dataset.word;
+        const accent = btn.dataset.accent;
+        const wasPlaying = audio.isPlaying;
+        const resumeIndex = state.currentIndex;
+        audio.stop(true);
+        clearLoopTimer();
+        btn.classList.add('speaking');
+        audio.speakWord(w, () => {
+          btn.classList.remove('speaking');
+          if (wasPlaying && resumeIndex === state.currentIndex) {
+            playCurrent('loop');
+            updatePlayBtn(true);
+          }
+        }, { voiceVariant: accent });
+      });
+    });
+
+    list.querySelectorAll('.wb-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const w = btn.dataset.word;
+        state.wordbook = state.wordbook.filter(x => x !== w);
+        localStorage.setItem('lp_wordbook', JSON.stringify(state.wordbook));
+        updateWordbookBadge();
+        renderWordbook();
+      });
+    });
+  }
+
+  function showWordbook() {
+    renderWordbook();
+    updateWordbookBadge();
+    openSheet('wordbookSheet');
   }
 
   // ---- Track Session Time ----
@@ -901,57 +1381,74 @@
 
   // ---- Language ----
   function updateI18n() {
-    const dict = i18n[state.lang];
-    if (!dict) return;
+    const dict = i18n[state.lang] || i18n.en;
+    document.documentElement.lang = state.lang === 'zh' ? 'zh-CN' : 'en';
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
-      const key = el.dataset.i18n;
-      if (key === 'selectPrompt' && state.currentIndex >= 0 && state.filtered.length > 0) return;
-      if (dict[key]) el.textContent = dict[key];
+      const value = dict[el.dataset.i18n];
+      if (typeof value === 'string') el.textContent = value;
     });
 
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
-      const key = el.dataset.i18nTitle;
-      if (dict[key]) el.title = dict[key];
+      const value = dict[el.dataset.i18nTitle];
+      if (typeof value === 'string') {
+        el.title = value;
+        el.setAttribute('aria-label', value);
+      }
     });
 
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-      const key = el.dataset.i18nPlaceholder;
-      if (dict[key]) el.placeholder = dict[key];
+    document.querySelectorAll('#langControl .seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.langValue === state.lang);
     });
 
-    // Update dynamic texts
-    if (state.currentIndex >= 0 && state.filtered.length > 0) {
-      const s = state.filtered[state.currentIndex];
-      const levelNames = { elementary: i18n[state.lang].lvl_elementary, intermediate: i18n[state.lang].lvl_intermediate, advanced: i18n[state.lang].lvl_advanced };
-      cardBadge.textContent = levelNames[s.level] || s.level;
+    renderTopicRail();
+    renderTopicHead();
+    renderSpeedPopover();
+    renderLevelPopover();
+    renderStats();
+    syncModeUi();
+    updateWordbookBadge();
+    if (openSheetEl && openSheetEl.id === 'topicSheet') renderTopicSheet();
+    if (openSheetEl && openSheetEl.id === 'wordbookSheet') renderWordbook();
+
+    // Re-render the highlighted line so its button labels follow the language.
+    if (activeEl && activeEl.isConnected && state.filtered[state.currentIndex]) {
+      renderMsg(activeEl, state.filtered[state.currentIndex], state.currentIndex, true);
     }
 
-    // Check if we need to update the prompt manually if no selection
-    if (state.currentIndex < 0 || state.filtered.length === 0) {
-      sentenceText.innerHTML = i18n[state.lang].selectPrompt;
-    }
     const popupWord = $('popupWord').textContent;
     if (wordPopup.classList.contains('show') && popupWord) {
-      const dict = getDict();
-      renderWordPronunciations(popupWord, (dict && dict[popupWord]) || null);
+      const wordDict = getDict();
+      renderWordPronunciations(popupWord, (wordDict && wordDict[popupWord]) || null);
     }
     renderInstallPrompt();
   }
 
   function setupLanguage() {
     updateI18n();
-    $('btnLang').addEventListener('click', () => {
-      state.lang = state.lang === 'en' ? 'zh' : 'en';
-      localStorage.setItem('lp_lang', state.lang);
-      updateI18n();
-      populateVoiceSelect(); // refresh "Auto" option label
+    document.querySelectorAll('#langControl .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const next = btn.dataset.langValue === 'zh' ? 'zh' : 'en';
+        if (next === state.lang) return;
+        state.lang = next;
+        localStorage.setItem('lp_lang', state.lang);
+        updateI18n();
+        populateVoiceSelect(); // refresh "Auto" option label
+      });
     });
   }
 
-  function closeSettingsDrawer() {
-    settingsDrawer.classList.remove('show');
-    settingsOverlay.classList.remove('show');
+  // ---- Me sheet: profile, accent ----
+  function setupProfile() {
+    let name = '';
+    try {
+      const session = Auth.getSession();
+      name = (session && session.username) || '';
+    } catch (_) {}
+    const initial = (name.trim().charAt(0) || 'L').toUpperCase();
+    $('avatarInitial').textContent = initial;
+    $('profileAvatar').textContent = initial;
+    $('profileName').textContent = name || 'ListenPro';
   }
 
   function setupPersonalization() {
@@ -962,12 +1459,13 @@
     };
     syncAccentActive();
 
-    $('btnPersonalize').addEventListener('click', () => {
-      settingsDrawer.classList.add('show');
-      settingsOverlay.classList.add('show');
+    $('btnMenu').addEventListener('click', () => {
+      renderStats();
+      openSheet('menuSheet');
     });
-    $('closeSettingsDrawer').addEventListener('click', closeSettingsDrawer);
-    settingsOverlay.addEventListener('click', closeSettingsDrawer);
+    $('statTiles').addEventListener('click', e => {
+      if (e.target.closest('[data-open="wordbook"]')) showWordbook();
+    });
 
     accentButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1143,121 +1641,197 @@
   }
 
   // ---- Theme ----
-  function setupTheme() {
-    const applyTheme = (animate = false) => {
-      if (animate) {
-        document.documentElement.classList.add('theme-transition');
-        setTimeout(() => document.documentElement.classList.remove('theme-transition'), 500);
-      }
-      if (state.theme === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-        $('themeIcon').className = 'ri-moon-line'; // the icon to switch *back* to dark mode is usually a moon
-      } else {
-        document.documentElement.removeAttribute('data-theme');
-        $('themeIcon').className = 'ri-sun-line'; // icon to switch to light mode is sun
-      }
-      const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-      if (metaThemeColor) {
-        metaThemeColor.setAttribute('content', state.theme === 'light' ? '#f1f5f9' : '#0f0e17');
-      }
-    };
-    applyTheme(false);
-    $('btnTheme').addEventListener('click', () => {
-      state.theme = state.theme === 'light' ? 'dark' : 'light';
-      localStorage.setItem('lp_theme', state.theme);
-      applyTheme(true);
+  function applyTheme(animate = false) {
+    if (animate) {
+      document.documentElement.classList.add('theme-transition');
+      setTimeout(() => document.documentElement.classList.remove('theme-transition'), 500);
+    }
+    if (state.theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute('content', state.theme === 'light' ? '#f4f5f9' : '#0b0b12');
+    }
+    document.querySelectorAll('#themeControl .seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.themeValue === state.theme);
     });
   }
 
-  // ---- Dropdown Menu ----
-  function setupDropdown() {
-    const dropdown = $('headerDropdown');
-    const btnMore = $('btnMore');
-    if (!dropdown || !btnMore) return;
-    
-    document.addEventListener('click', (e) => {
-      if (btnMore.contains(e.target)) {
-        dropdown.classList.toggle('show');
-      } else if (!dropdown.contains(e.target) || e.target.closest('.dropdown-item')) {
-        dropdown.classList.remove('show');
-      }
+  function setupTheme() {
+    applyTheme(false);
+    document.querySelectorAll('#themeControl .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const next = btn.dataset.themeValue === 'light' ? 'light' : 'dark';
+        if (next === state.theme) return;
+        state.theme = next;
+        localStorage.setItem('lp_theme', state.theme);
+        applyTheme(true);
+      });
+    });
+  }
+
+  // ---- Topics, level, list interactions ----
+  function setupTopics() {
+    topicRail.addEventListener('click', e => {
+      const chip = e.target.closest('[data-topic]');
+      if (!chip) return;
+      setTopic(chip.dataset.topic);
+      scrollActiveChipIntoView(true);
     });
 
-    // Hide dropdown on scroll
-    window.addEventListener('scroll', () => {
-      if (dropdown.classList.contains('show')) {
-        dropdown.classList.remove('show');
+    $('btnTopicSheet').addEventListener('click', () => {
+      renderTopicSheet();
+      openSheet('topicSheet');
+    });
+
+    $('topicSheetBody').addEventListener('click', e => {
+      const card = e.target.closest('[data-topic]');
+      if (!card) return;
+      setTopic(card.dataset.topic);
+      closeSheet();
+      scrollActiveChipIntoView(true);
+    });
+
+    $('btnLevel').addEventListener('click', e => {
+      e.stopPropagation();
+      renderLevelPopover();
+      openPopover($('levelPopover'), $('btnLevel'), 'below');
+    });
+
+    $('levelPopover').addEventListener('click', e => {
+      const item = e.target.closest('[data-level]');
+      if (!item || item.disabled) return;
+      e.stopPropagation();
+      closePopover();
+      setLevel(item.dataset.level);
+    });
+
+    document.addEventListener('click', e => {
+      if (!openPopoverState) return;
+      const path = e.composedPath();
+      if (!path.includes(openPopoverState.el) && !path.includes(openPopoverState.anchor)) closePopover();
+    });
+    window.addEventListener('resize', closePopover);
+  }
+
+  function setupList() {
+    sentenceList.addEventListener('click', e => {
+      if (e.target.closest('[data-action="reset-level"]')) {
+        setLevel('all');
+        return;
       }
-    }, { passive: true, capture: true });
+      const li = e.target.closest('.msg');
+      if (!li) return;
+      const index = parseInt(li.dataset.index, 10);
+      if (isNaN(index)) return;
+      const isActive = li.classList.contains('active');
+
+      const tool = e.target.closest('.msg-tool');
+      if (tool && isActive) {
+        if (tool.dataset.action === 'replay') selectSentence(index);
+        else if (tool.dataset.action === 'cn') toggleActiveTranslation();
+        return;
+      }
+
+      const wordEl = e.target.closest('.word');
+      if (wordEl && isActive) {
+        showWordPopup(wordEl.dataset.word, wordEl);
+        return;
+      }
+
+      if (!isActive) {
+        maybeShowWordTip();
+        selectSentence(index);
+      }
+    });
+  }
+
+  function setupScrollTracking() {
+    const markUserScroll = () => { lastUserScrollAt = Date.now(); };
+    window.addEventListener('touchmove', markUserScroll, { passive: true });
+    window.addEventListener('wheel', markUserScroll, { passive: true });
+
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+      if (openPopoverState) closePopover();
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        topbar.classList.toggle('scrolled', window.scrollY > 4);
+        updateLocatePill();
+      });
+    }, { passive: true });
+    window.addEventListener('resize', updateLocatePill);
+
+    // Coming back from the lock screen / another app: bring the current line into view.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) setTimeout(() => followActive('nav'), 150);
+    });
+
+    locatePill.addEventListener('click', () => followActive('force'));
+  }
+
+  function setupKeyboard() {
+    const scrollKeys = ['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown'];
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closePopover();
+        closeWordPopup();
+        closeSheet();
+        return;
+      }
+      if (scrollKeys.includes(e.key)) lastUserScrollAt = Date.now();
+      if (openSheetEl || e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target && e.target.tagName ? e.target.tagName : '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
+      // Clicking the buttons (instead of calling the handlers) keeps auth-guard's checks in the loop.
+      if (e.code === 'Space' && tag !== 'button') {
+        e.preventDefault();
+        $('btnPlay').click();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        $('btnPrev').click();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        $('btnNext').click();
+      }
+    });
   }
 
   // ---- Initialize ----
   function init() {
     setupTheme();
-    setupDropdown();
+    setupSheets();
+    setupProfile();
     setupLanguage();
     setupPersonalization();
-    setupFilters();
+    setupTopics();
     setupSpeed();
     setupPlayMode();
     setupFontSize();
-    setupPlayerCollapse();
-    
-    $('btnToggleCn').addEventListener('click', () => {
-      state.showCn = !state.showCn;
-      localStorage.setItem('lp_showCn', state.showCn);
-      updateDisplay();
-    });
-    
     setupWordPopup();
+    setupList();
+    setupScrollTracking();
+    setupKeyboard();
     startSessionTimer();
 
-    $('btnPlay').addEventListener('click', togglePlay);
+    $('btnPlay').addEventListener('click', () => {
+      maybeShowWordTip();
+      togglePlay();
+    });
     $('btnPrev').addEventListener('click', playPrev);
     $('btnNext').addEventListener('click', playNext);
-    
-    if ($('btnMiniPlay')) $('btnMiniPlay').addEventListener('click', togglePlay);
-    if ($('btnMiniPrev')) $('btnMiniPrev').addEventListener('click', playPrev);
-    if ($('btnMiniNext')) $('btnMiniNext').addEventListener('click', playNext);
-
-    $('btnStats').addEventListener('click', showStats);
     $('btnWordbook').addEventListener('click', showWordbook);
-    $('btnLocate').addEventListener('click', () => {
-      const activeItem = sentenceList.querySelector('.sentence-item.active');
-      if (activeItem) activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    });
-    $('btnBackToTop').addEventListener('click', () => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      const sentenceListEl = $('sentenceList');
-      if (sentenceListEl) {
-        sentenceListEl.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    });
-    $('closeStats').addEventListener('click', () => statsModal.classList.remove('show'));
-    $('closeWordbook').addEventListener('click', () => wordbookModal.classList.remove('show'));
-
-    // Close modals on overlay click
-    [statsModal, wordbookModal].forEach(modal => {
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.classList.remove('show');
-      });
-    });
-
-    // Event delegation for sentence list
-    sentenceList.addEventListener('click', (e) => {
-      const li = e.target.closest('.sentence-item');
-      if (li) {
-        const index = parseInt(li.dataset.index, 10);
-        if (!isNaN(index)) {
-          selectSentence(index);
-        }
-      }
-    });
 
     // Initial render in the next frame to allow the UI shell to show first
     requestAnimationFrame(() => {
       applyFilters();
-      
+      scrollActiveChipIntoView(false);
+
       // Defer less critical setup to keep the main thread free for the first render
       setTimeout(() => {
         setupVoiceSelect();
