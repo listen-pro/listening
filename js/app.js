@@ -59,7 +59,6 @@
     speakCn: localStorage.getItem('lp_speakCn') === 'true',
     accent: localStorage.getItem('lp_accent') || 'us',
     theme: localStorage.getItem('lp_theme') || 'dark',
-    voiceName: localStorage.getItem('lp_voiceName') || 'Samantha',
     renderedCount: 0
   };
 
@@ -92,8 +91,6 @@
       noWords: "No words saved yet.<br>Tap a word in a sentence, then tap the star.",
       lvl_elementary: "Elementary", lvl_intermediate: "Intermediate", lvl_advanced: "Advanced",
       accentLabel: "Accent", accentUs: "US", accentUk: "UK",
-      voiceLabel: "Voice", voiceDefault: "Auto (Recommended)", voiceLoading: "Loading voices…", voicePreviewTitle: "Preview Voice",
-      voiceHint: "Used only when a sentence has no recorded audio.",
       installTitle: "Install App",
       installDescNative: "Add this app to your home screen for a faster fullscreen experience.",
       installDescIosSafari: "Tap Share, then choose Add to Home Screen.",
@@ -132,8 +129,6 @@
       noWords: "还没有收藏单词。<br>点按句子里的单词，再点星标即可收藏。",
       lvl_elementary: "入门级", lvl_intermediate: "进阶级", lvl_advanced: "高级",
       accentLabel: "口音", accentUs: "美音", accentUk: "英音",
-      voiceLabel: "音色", voiceDefault: "自动（推荐）", voiceLoading: "加载音色中…", voicePreviewTitle: "试听音色",
-      voiceHint: "仅在句子没有录制音频时使用系统语音。",
       installTitle: "添加到桌面",
       installDescNative: "将应用添加到桌面，获得更快的全屏使用体验。",
       installDescIosSafari: "点击下方分享按钮，再选择“添加到主屏幕”。",
@@ -877,8 +872,8 @@
 
   function buildMediaTracks(sentence, rates) {
     const enKey = state.accent === 'uk' ? 'en-gb' : 'en-us';
-    const enSrc = `audio/${enKey}/${sentence.id}.m4a?v=2`;
-    const zhSrc = `audio/zh/${sentence.id}.m4a?v=2`;
+    const enSrc = `audio/${enKey}/${sentence.id}.m4a?v=3`;
+    const zhSrc = `audio/zh/${sentence.id}.m4a?v=3`;
     const gap = 'audio/ui/gap-pass.m4a';
     const title = sentence.text;
     const tracks = [];
@@ -1284,8 +1279,6 @@
     openSheetEl = null;
     scrim.classList.remove('show');
     document.body.classList.remove('sheet-open');
-    const select = $('voiceSelect');
-    if (select) select.classList.remove('open');
     updateLocatePill();
   }
 
@@ -1537,8 +1530,6 @@
       btn.addEventListener('click', () => {
         state.accent = btn.dataset.accent === 'uk' ? 'uk' : 'us';
         localStorage.setItem('lp_accent', state.accent);
-        // NOTE: accent only affects IPA display and lang tag (en-US / en-GB).
-        // Voice selection is independent and controlled solely by the voice dropdown.
         syncAccentActive();
         // Refresh word popup pronunciations if open
         const popupWord = $('popupWord').textContent;
@@ -1548,162 +1539,6 @@
         }
       });
     });
-  }
-
-  // ---- Voice Select ----
-  // Novelty / gimmick voice names to exclude from the list
-  const NOVELTY_VOICE_BLACKLIST = [
-    'albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos',
-    'deranged', 'good news', 'hysterical', 'jester', 'organ', 'pipe organ',
-    'princess', 'trinoids', 'whisper', 'wobble', 'zarvox', 'superstar',
-    'ralph', 'fred', 'junior', 'kathy', 'vicki', 'victoria',
-    'ghost', 'creaky', 'alien', 'robot', 'ethereal', 'spooky'
-  ];
-
-  function isNormalVoice(voice) {
-    const nameLc = voice.name.toLowerCase();
-    return !NOVELTY_VOICE_BLACKLIST.some(kw => nameLc.includes(kw));
-  }
-
-  function populateVoiceSelect() {
-    const container = $('voiceOptions');
-    const triggerValue = document.querySelector('.select-value');
-    if (!container) return;
-
-    const langPack = i18n[state.lang] || i18n.en;
-    const voices = audio.getAvailableVoices('en').filter(isNormalVoice);
-    container.innerHTML = '';
-    
-    // Helper to create an option
-    const createOption = (v) => {
-      const opt = document.createElement('div');
-      opt.className = 'custom-option';
-      if (v.name === state.voiceName) opt.classList.add('selected');
-      
-      let displayName = v.name
-        .replace(/Microsoft\s+/g, '')
-        .replace(/Google\s+/g, '')
-        .replace(/Apple\s+/g, '')
-        .replace(/\s*-\s*English\s*\(.*\)/gi, '')
-        .replace(/\s*\(.*\)/g, '')
-        .trim();
-        
-      opt.textContent = v.localService ? displayName : (displayName + ' ☁');
-      opt.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.voiceName = v.name;
-        localStorage.setItem('lp_voiceName', v.name);
-        audio.setVoiceByName(v.name);
-        triggerValue.textContent = opt.textContent;
-        $('voiceSelect').classList.remove('open');
-        populateVoiceSelect(); // Refresh selected state
-      });
-      return opt;
-    };
-
-    // Auto option
-    const autoOpt = document.createElement('div');
-    autoOpt.className = 'custom-option';
-    if (!state.voiceName) autoOpt.classList.add('selected');
-    autoOpt.textContent = langPack.voiceDefault;
-    autoOpt.addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.voiceName = '';
-      localStorage.removeItem('lp_voiceName');
-      audio.setVoiceByName(null);
-      triggerValue.textContent = langPack.voiceDefault;
-      $('voiceSelect').classList.remove('open');
-      populateVoiceSelect();
-    });
-    container.appendChild(autoOpt);
-    
-    // Grouped voices
-    const usVoices = voices.filter(v => {
-      const lc = v.lang.toLowerCase();
-      return lc.startsWith('en-us') || lc.startsWith('en-ca');
-    });
-    const ukVoices = voices.filter(v => {
-      const lc = v.lang.toLowerCase();
-      return !lc.startsWith('en-us') && !lc.startsWith('en-ca');
-    });
-
-    if (usVoices.length) {
-      const label = document.createElement('div');
-      label.className = 'option-group-label';
-      label.textContent = state.lang === 'zh' ? '🇺🇸 美式英语 (US)' : '🇺🇸 US English';
-      container.appendChild(label);
-      usVoices.forEach(v => container.appendChild(createOption(v)));
-    }
-
-    if (ukVoices.length) {
-      const label = document.createElement('div');
-      label.className = 'option-group-label';
-      label.textContent = state.lang === 'zh' ? '🇬🇧 英式/其他 (UK)' : '🇬🇧 UK / Other';
-      container.appendChild(label);
-      ukVoices.forEach(v => container.appendChild(createOption(v)));
-    }
-
-    // Set initial trigger value
-    if (state.voiceName) {
-      const currentVoice = voices.find(v => v.name === state.voiceName);
-      if (currentVoice) {
-        let displayName = currentVoice.name.replace(/Microsoft\s+|Google\s+|Apple\s+/g, '').replace(/\s*-\s*English\s*\(.*\)/gi, '').replace(/\s*\(.*\)/g, '').trim();
-        triggerValue.textContent = currentVoice.localService ? displayName : (displayName + ' ☁');
-      } else {
-        triggerValue.textContent = langPack.voiceDefault;
-      }
-    } else {
-      triggerValue.textContent = langPack.voiceDefault;
-    }
-  }
-
-  function setupVoiceSelect() {
-    const select = $('voiceSelect');
-    const trigger = select ? select.querySelector('.select-trigger') : null;
-    const previewBtn = $('btnPreviewVoice');
-    if (!select || !trigger) return;
-
-    populateVoiceSelect();
-
-    trigger.addEventListener('click', (e) => {
-      e.stopPropagation();
-      select.classList.toggle('open');
-      
-      // Close other dropdowns if any
-      if (select.classList.contains('open')) {
-        const moreMenu = $('headerDropdown');
-        if (moreMenu) moreMenu.classList.remove('show');
-      }
-    });
-
-    document.addEventListener('click', () => {
-      select.classList.remove('open');
-    });
-
-    // Re-populate when browser finishes loading all voices
-    const synth = window.speechSynthesis;
-    synth.onvoiceschanged = () => populateVoiceSelect();
-
-    // Restore saved voice after engine is ready
-    if (state.voiceName) {
-      setTimeout(() => audio.setVoiceByName(state.voiceName), 400);
-    }
-
-    if (previewBtn) {
-      previewBtn.addEventListener('click', () => {
-        const voices = synth.getVoices();
-        const selVoice = state.voiceName ? voices.find(v => v.name === state.voiceName) : null;
-        const utt = new SpeechSynthesisUtterance('Hello, this is a voice preview.');
-        if (selVoice) utt.voice = selVoice;
-        utt.lang = selVoice ? selVoice.lang : (state.accent === 'uk' ? 'en-GB' : 'en-US');
-        utt.rate = 0.9;
-        utt.pitch = 1;
-        previewBtn.classList.add('speaking');
-        utt.onend = utt.onerror = () => previewBtn.classList.remove('speaking');
-        synth.cancel();
-        synth.speak(utt);
-      });
-    }
   }
 
   // ---- Theme ----
@@ -1899,10 +1734,7 @@
       scrollActiveChipIntoView(false);
 
       // Defer less critical setup to keep the main thread free for the first render
-      setTimeout(() => {
-        setupVoiceSelect();
-        setupInstallPrompt();
-      }, 100);
+      setTimeout(setupInstallPrompt, 100);
     });
   }
 

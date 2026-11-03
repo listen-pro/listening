@@ -11,10 +11,24 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const AUDIO_ROOT = path.join(ROOT, 'audio');
 const TMP_ROOT = path.join(ROOT, 'tools/audio/.tmp');
 const VOICES = {
-  'en-us': 'en-US-AriaNeural',
-  'en-gb': 'en-GB-SoniaNeural',
-  zh: 'zh-CN-XiaoxiaoNeural'
+  'en-us-m': 'en-US-GuyNeural',
+  'en-us-f': 'en-US-AriaNeural',
+  'en-gb-m': 'en-GB-RyanNeural',
+  'en-gb-f': 'en-GB-SoniaNeural',
+  'zh-m': 'zh-CN-YunxiNeural',
+  'zh-f': 'zh-CN-XiaoxiaoNeural'
 };
+
+function speakerRole(sentence) {
+  const text = sentence.text || '';
+  const cn = sentence.cn || '';
+  const match = text.match(/^\s*([AB])\s*[:：]/) || cn.match(/^\s*([AB])\s*[:：]/);
+  return match ? match[1] : 'B';
+}
+
+function voiceFor(lang, sentence) {
+  return `${lang}-${speakerRole(sentence) === 'A' ? 'm' : 'f'}`;
+}
 
 const limitArg = process.argv.indexOf('--limit');
 const LIMIT = limitArg >= 0 ? Number(process.argv[limitArg + 1]) : Infinity;
@@ -211,32 +225,31 @@ async function main() {
   };
   writeCatalog(catalog);
 
-  const lanes = {
-    'en-us': [new VoiceLane(VOICES['en-us']), new VoiceLane(VOICES['en-us'])],
-    'en-gb': [new VoiceLane(VOICES['en-gb']), new VoiceLane(VOICES['en-gb'])],
-    zh: [new VoiceLane(VOICES.zh), new VoiceLane(VOICES.zh)]
-  };
-  const laneCursor = { 'en-us': 0, 'en-gb': 0, zh: 0 };
+  const lanes = {};
+  for (const [key, voiceName] of Object.entries(VOICES)) {
+    lanes[key] = [new VoiceLane(voiceName), new VoiceLane(voiceName)];
+  }
+  const laneCursor = Object.fromEntries(Object.keys(VOICES).map(key => [key, 0]));
   const jobs = [];
 
   for (const sentence of selected) {
     jobs.push({
       id: `en-us-${sentence.id}`,
-      voice: 'en-us',
+      voice: voiceFor('en-us', sentence),
       text: englishText(sentence, 'us'),
       output: path.join(AUDIO_ROOT, 'en-us', `${sentence.id}.m4a`),
       mark: () => catalog['en-us'].add(String(sentence.id))
     });
     jobs.push({
       id: `en-gb-${sentence.id}`,
-      voice: 'en-gb',
+      voice: voiceFor('en-gb', sentence),
       text: englishText(sentence, 'uk'),
       output: path.join(AUDIO_ROOT, 'en-gb', `${sentence.id}.m4a`),
       mark: () => catalog['en-gb'].add(String(sentence.id))
     });
     jobs.push({
       id: `zh-${sentence.id}`,
-      voice: 'zh',
+      voice: voiceFor('zh', sentence),
       text: stripSpeakerLabel(sentence.cn || sentence.text),
       output: path.join(AUDIO_ROOT, 'zh', `${sentence.id}.m4a`),
       mark: () => catalog.zh.add(String(sentence.id))
@@ -255,14 +268,14 @@ async function main() {
   for (const [slug, spoken] of wordMap) {
     jobs.push({
       id: `word-us-${slug}`,
-      voice: 'en-us',
+      voice: 'en-us-f',
       text: spoken,
       output: path.join(AUDIO_ROOT, 'words', `${slug}.m4a`),
       mark: () => catalog.words.add(slug)
     });
     jobs.push({
       id: `word-uk-${slug}`,
-      voice: 'en-gb',
+      voice: 'en-gb-f',
       text: spoken,
       output: path.join(AUDIO_ROOT, 'words-uk', `${slug}.m4a`),
       mark: () => catalog.wordsUk.add(slug)

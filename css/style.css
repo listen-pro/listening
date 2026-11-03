@@ -1503,119 +1503,6 @@ button.stat-tile:active {
   cursor: pointer;
 }
 
-/* Voice select (inline list inside the sheet) */
-.voice-select-wrap {
-  margin-top: 12px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.custom-select {
-  flex: 1;
-  min-width: 0;
-  user-select: none;
-}
-
-.select-trigger {
-  height: 44px;
-  padding: 0 12px 0 14px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.select-value {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.select-trigger i {
-  font-size: 18px;
-  color: var(--text2);
-  transition: transform 0.2s;
-}
-
-.custom-select.open .select-trigger {
-  border-color: var(--primary);
-}
-
-.custom-select.open .select-trigger i {
-  transform: rotate(180deg);
-}
-
-.select-options {
-  display: none;
-  margin-top: 8px;
-  padding: 6px;
-  max-height: 240px;
-  overflow-y: auto;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-}
-
-.custom-select.open .select-options {
-  display: block;
-  animation: fadeIn 0.2s ease;
-}
-
-.option-group-label {
-  padding: 10px 10px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text3);
-}
-
-.custom-option {
-  padding: 10px;
-  border-radius: 9px;
-  color: var(--text2);
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-}
-
-.custom-option.selected {
-  background: var(--primary-soft);
-  color: var(--primary-strong);
-  font-weight: 600;
-}
-
-.custom-option.selected::after {
-  content: "\eb7b";
-  font-family: "remixicon";
-  font-size: 16px;
-}
-
-.voice-preview-btn {
-  flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--primary-strong);
-  font-size: 19px;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-.voice-preview-btn.speaking i,
 .pron-btn.speaking i {
   animation: pulse 0.8s ease-in-out infinite;
 }
@@ -1991,8 +1878,7 @@ button.stat-tile:active {
   .dock-btn.on:hover {
     color: var(--primary-strong);
   }
-  .pop-item:not(.active):not(:disabled):hover,
-  .custom-option:not(.selected):hover {
+  .pop-item:not(.active):not(:disabled):hover {
     background: var(--surface-2);
     color: var(--text);
   }
