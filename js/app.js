@@ -72,7 +72,9 @@
       speedTitle: "Speed",
       speedNames: { 0.5: "Very slow", 0.75: "Slow", 1: "Normal", 1.25: "Fast", 1.5: "Very fast" },
       speedNext: v => `${v}× from the next sentence`,
-      sequential: "Play in order", loop: "Repeat one",
+      modeTitle: "Playback", sequential: "Play in order", sequentialDesc: "Each line once, then the next",
+      loopTimes: n => `Repeat each line ×${n}`, loopForever: "Repeat one forever",
+      loopDesc: "Then moves to the next line", foreverDesc: "Stays on the current line",
       backToCurrent: "Now playing",
       replay: "Replay", translation: "Translation",
       emptyList: "No sentences here yet", emptyAction: "Show all levels",
@@ -108,7 +110,9 @@
       speedTitle: "语速",
       speedNames: { 0.5: "很慢", 0.75: "慢速", 1: "正常", 1.25: "稍快", 1.5: "很快" },
       speedNext: v => `${v}× 从下一句开始生效`,
-      sequential: "顺序播放", loop: "单句循环",
+      modeTitle: "播放方式", sequential: "顺序播放", sequentialDesc: "每句读一遍，接着下一句",
+      loopTimes: n => `单句循环 ${n} 遍`, loopForever: "单句无限循环",
+      loopDesc: "读满后自动进入下一句", foreverDesc: "一直重复当前句",
       backToCurrent: "回到当前句",
       replay: "重播", translation: "译文",
       emptyList: "这里还没有句子", emptyAction: "查看全部难度",
@@ -492,24 +496,29 @@
     openPopoverState = null;
   }
 
-  function openPopover(el, anchor, placement) {
+  function openPopover(el, anchor, placement, align = 'right') {
     if (openPopoverState && openPopoverState.el === el) {
       closePopover();
       return;
     }
     closePopover();
     const rect = anchor.getBoundingClientRect();
-    el.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`;
-    el.style.left = 'auto';
+    if (align === 'left') {
+      el.style.left = `${Math.max(12, rect.left)}px`;
+      el.style.right = 'auto';
+    } else {
+      el.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`;
+      el.style.left = 'auto';
+    }
+    const vertical = placement === 'above' ? 'bottom' : 'top';
     if (placement === 'above') {
       el.style.top = 'auto';
       el.style.bottom = `${window.innerHeight - rect.top + 12}px`;
-      el.style.setProperty('--origin', 'bottom right');
     } else {
       el.style.bottom = 'auto';
       el.style.top = `${rect.bottom + 8}px`;
-      el.style.setProperty('--origin', 'top right');
     }
+    el.style.setProperty('--origin', `${vertical} ${align}`);
     el.classList.add('show');
     anchor.setAttribute('aria-expanded', 'true');
     openPopoverState = { el, anchor };
@@ -1068,24 +1077,61 @@
   }
 
   // ---- Play Mode ----
+  function repeatLabel(value) {
+    if (value === 1) return t('sequential');
+    return value === 0 ? t('loopForever') : t('loopTimes')(value);
+  }
+
   function syncModeUi() {
-    const loop = state.playMode === 'loop';
+    const loop = state.repeat !== 1;
     const btn = $('btnMode');
     $('modeIcon').className = loop ? 'ri-repeat-one-line' : 'ri-order-play-line';
     btn.classList.toggle('on', loop);
-    btn.setAttribute('aria-pressed', String(loop));
-    btn.title = loop ? t('loop') : t('sequential');
+    const count = $('modeCount');
+    count.hidden = !loop;
+    count.textContent = state.repeat === 0 ? '∞' : String(state.repeat);
+    btn.title = repeatLabel(state.repeat);
     btn.setAttribute('aria-label', btn.title);
+  }
+
+  function renderModePopover() {
+    const item = value => {
+      const active = state.repeat === value;
+      const icon = value === 1 ? 'ri-order-play-line' : 'ri-repeat-one-line';
+      const desc = value === 1 ? t('sequentialDesc') : (value === 0 ? t('foreverDesc') : t('loopDesc'));
+      return `
+        <button class="pop-item${active ? ' active' : ''}" role="menuitemradio" aria-checked="${active}" data-repeat="${value}">
+          <i class="${icon}"></i>
+          <span class="pop-stack"><span>${escapeHtml(repeatLabel(value))}</span><small>${escapeHtml(desc)}</small></span>
+          <span class="pop-meta">${active ? '<i class="ri-check-line"></i>' : ''}</span>
+        </button>`;
+    };
+    $('modePopover').innerHTML = `<div class="pop-title">${escapeHtml(t('modeTitle'))}</div>`
+      + item(1)
+      + `<div class="pop-divider"></div>`
+      + REPEAT_OPTIONS.filter(v => v !== 1).map(item).join('');
   }
 
   function setupPlayMode() {
     syncModeUi();
-    $('btnMode').addEventListener('click', () => {
-      state.playMode = state.playMode === 'loop' ? 'sequential' : 'loop';
-      localStorage.setItem('lp_playMode', state.playMode);
+    $('btnMode').addEventListener('click', e => {
+      e.stopPropagation();
+      renderModePopover();
+      openPopover($('modePopover'), $('btnMode'), 'above', 'left');
+    });
+    $('modePopover').addEventListener('click', e => {
+      const item = e.target.closest('[data-repeat]');
+      if (!item) return;
+      e.stopPropagation();
+      closePopover();
+      const next = parseInt(item.dataset.repeat, 10);
+      if (next === state.repeat) return;
+      state.repeat = next;
+      // Count the read in progress toward the new setting.
+      state.playsDone = Math.min(state.playsDone, Math.max(0, next - 1));
+      localStorage.setItem('lp_repeat', String(next));
       syncModeUi();
-      const loop = state.playMode === 'loop';
-      showToast(loop ? t('loop') : t('sequential'), loop ? 'ri-repeat-one-line' : 'ri-order-play-line');
+      showToast(repeatLabel(next), next === 1 ? 'ri-order-play-line' : 'ri-repeat-one-line');
     });
   }
 

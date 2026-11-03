@@ -126,8 +126,9 @@
       <div class="dock" id="dock">
         <div class="dock-progress"><div class="progress-bar" id="progressBar"></div></div>
         <div class="dock-row">
-          <button id="btnMode" class="dock-btn" data-i18n-title="titleMode" title="Play mode">
+          <button id="btnMode" class="dock-btn" title="Play mode" aria-haspopup="menu">
             <i class="ri-order-play-line" id="modeIcon"></i>
+            <span class="mode-count" id="modeCount" hidden></span>
           </button>
           <button id="btnPrev" class="dock-btn" data-i18n-title="titlePrev" title="Previous">
             <i class="ri-skip-back-fill"></i>
@@ -145,6 +146,7 @@
       </div>
 
       <!-- Popovers -->
+      <div class="popover" id="modePopover" role="menu"></div>
       <div class="popover" id="speedPopover" role="menu"></div>
       <div class="popover" id="levelPopover" role="menu"></div>
 
