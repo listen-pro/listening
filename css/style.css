@@ -1362,6 +1362,57 @@ button.stat-tile:active {
   color: var(--text2);
 }
 
+.set-row-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* iOS-style switch */
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 50px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s var(--ease-out);
+}
+
+.switch[aria-checked="true"] {
+  background: var(--gradient1);
+  box-shadow: 0 6px 16px -8px var(--primary-glow);
+}
+
+.switch[aria-checked="true"] .switch-thumb {
+  transform: translateX(20px);
+}
+
+.switch:active .switch-thumb {
+  width: 28px;
+}
+
+.switch[aria-checked="true"]:active .switch-thumb {
+  transform: translateX(16px);
+}
+
 .set-hint {
   margin-top: 8px;
   font-size: 12px;

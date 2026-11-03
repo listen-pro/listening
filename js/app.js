@@ -56,6 +56,7 @@
     stats: JSON.parse(localStorage.getItem('lp_stats') || '{"totalTime":0,"sessionsCount":0,"sentencesPlayed":0,"startTime":null}'),
     lang: localStorage.getItem('lp_lang') || 'en',
     showCn: localStorage.getItem('lp_showCn') === 'true',
+    speakCn: localStorage.getItem('lp_speakCn') === 'true',
     accent: localStorage.getItem('lp_accent') || 'us',
     theme: localStorage.getItem('lp_theme') || 'dark',
     voiceName: localStorage.getItem('lp_voiceName') || 'Samantha',
@@ -82,6 +83,8 @@
       menuTitle: "Me", profileSub: "Keep your ears warm",
       statsPlayed: "Plays", statsWords: "Saved words", statsTotal: "Library",
       groupListening: "Listening", groupDisplay: "Display",
+      speakCnLabel: "Read Chinese aloud", speakCnHint: "After each English line, also play its Chinese translation.",
+      speakCnOn: "Chinese read-aloud on", speakCnOff: "English only",
       themeLabel: "Theme", themeDark: "Dark", themeLight: "Light",
       fontLabel: "Text size",
       wordbookTitle: "Word Book", wordbookCount: n => `${n} saved`,
@@ -120,6 +123,8 @@
       menuTitle: "我的", profileSub: "每天听一点，耳朵会记住",
       statsPlayed: "练习句次", statsWords: "收藏生词", statsTotal: "句库总量",
       groupListening: "听力", groupDisplay: "显示",
+      speakCnLabel: "朗读中文", speakCnHint: "每句英文读完后，再读一遍中文翻译。",
+      speakCnOn: "已开启中文朗读", speakCnOff: "只读英文",
       themeLabel: "主题", themeDark: "深色", themeLight: "浅色",
       fontLabel: "字号",
       wordbookTitle: "生词本", wordbookCount: n => `已收藏 ${n} 个`,
@@ -866,7 +871,8 @@
   function canPlaySentenceFromFile(sentence) {
     if (!audioCatalog) return false;
     const enKey = state.accent === 'uk' ? 'en-gb' : 'en-us';
-    return catalogHas(audioCatalog[enKey], sentence.id) && catalogHas(audioCatalog.zh, sentence.id);
+    if (!catalogHas(audioCatalog[enKey], sentence.id)) return false;
+    return !state.speakCn || catalogHas(audioCatalog.zh, sentence.id);
   }
 
   function buildMediaTracks(sentence, rates) {
@@ -878,15 +884,17 @@
     const tracks = [];
     const addSpeech = (src, rate) => tracks.push({ src, rate, title, critical: true });
 
-    // One read per play: English, a short gap, then the Chinese translation.
+    // One read per play: English; the Chinese translation follows only when "朗读中文" is on.
     addSpeech(enSrc, rates.first);
-    tracks.push({ src: gap, rate: 1, title });
-    tracks.push({
-      src: zhSrc,
-      rate: rates.chinese,
-      title: sentence.cn || sentence.text,
-      critical: true
-    });
+    if (state.speakCn) {
+      tracks.push({ src: gap, rate: 1, title });
+      tracks.push({
+        src: zhSrc,
+        rate: rates.chinese,
+        title: sentence.cn || sentence.text,
+        critical: true
+      });
+    }
     tracks.push({ src: 'audio/ui/gap-sentence.m4a', rate: 1, title });
     return tracks;
   }
@@ -956,9 +964,9 @@
     // Repeats keep their count; any fresh start (tap, prev/next, play) begins at zero.
     if (playReason !== 'repeat' && playReason !== 'loop') state.playsDone = 0;
     const passes = [
-      { text: s.text, lang: getEnglishLang(), rate: rates.first, pitch: 1.1, clearSpeech: true, voiceVariant: state.accent },
-      { text: s.cn || s.text, lang: 'zh-CN', rate: rates.chinese, pitch: 1.05, volume: 1 }
+      { text: s.text, lang: getEnglishLang(), rate: rates.first, pitch: 1.1, clearSpeech: true, voiceVariant: state.accent }
     ];
+    if (state.speakCn) passes.push({ text: s.cn || s.text, lang: 'zh-CN', rate: rates.chinese, pitch: 1.05, volume: 1 });
 
     const startSpeaking = () => {
       playPasses(passes, () => handleSentenceEnd(true));
@@ -1504,6 +1512,17 @@
       accentButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.accent === state.accent));
     };
     syncAccentActive();
+
+    const speakCnSwitch = $('speakCnSwitch');
+    const syncSpeakCn = () => speakCnSwitch.setAttribute('aria-checked', String(state.speakCn));
+    syncSpeakCn();
+    speakCnSwitch.addEventListener('click', () => {
+      state.speakCn = !state.speakCn;
+      localStorage.setItem('lp_speakCn', String(state.speakCn));
+      syncSpeakCn();
+      // Takes effect from the next line; the one playing keeps its queue.
+      showToast(state.speakCn ? t('speakCnOn') : t('speakCnOff'), state.speakCn ? 'ri-volume-up-line' : 'ri-volume-mute-line');
+    });
 
     $('btnMenu').addEventListener('click', () => {
       renderStats();
