@@ -73,17 +73,18 @@
     }, true); // capture phase — runs before app.js listeners
   });
 
-  // Also guard sentence list clicks via delegation
-  var sentenceList = document.getElementById('sentenceList');
-  if (sentenceList) {
-    sentenceList.addEventListener('click', function (e) {
+  // Also guard sentence list clicks (and the wide-layout current-line panel) via delegation
+  ['sentenceList', 'nowPanel'].forEach(function (id) {
+    var container = document.getElementById(id);
+    if (!container) return;
+    container.addEventListener('click', function (e) {
       var session = Auth.getSession();
       if (!session) {
         e.stopImmediatePropagation();
         Auth.redirectToLogin();
       }
     }, true);
-  }
+  });
 
   // ---- 3. Logout button ----
   var btnLogout = document.getElementById('btnLogout');

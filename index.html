@@ -48,6 +48,33 @@
   <body>
     <audio id="bgPlayer" preload="auto" playsinline webkit-playsinline style="display:none"></audio>
     <div id="app">
+      <!-- Topic sidebar: shown on iPad landscape and desktop (≥1024px) instead of the topic rail -->
+      <aside class="sidebar" id="sidebar">
+        <div class="side-brand">
+          <span class="brand-mark"><i class="ri-headphone-fill"></i></span>
+          <span class="brand-name">ListenPro</span>
+        </div>
+        <nav class="side-nav" id="sideNav" aria-label="Topics"></nav>
+        <!-- Wide layout: account + word book live here instead of the top bar -->
+        <div class="side-foot">
+          <button class="side-user" id="btnSideUser" type="button" data-i18n-title="menuTitle" title="Me">
+            <span class="side-avatar" id="sideAvatar">L</span>
+            <span class="side-user-text">
+              <span class="side-user-name" id="sideUserName">ListenPro</span>
+              <span class="side-user-sub" data-i18n="sideUserSub">Settings &amp; stats</span>
+            </span>
+          </button>
+          <button class="icon-btn" id="btnSideWordbook" type="button" data-i18n-title="wordbookTitle" title="Word Book">
+            <i class="ri-bookmark-3-line"></i>
+            <span class="icon-badge" id="sideWordbookBadge" hidden></span>
+          </button>
+        </div>
+        <div class="side-keys" aria-hidden="true">
+          <span><kbd>Space</kbd><span data-i18n="keyPlay">Play / Pause</span></span>
+          <span><kbd>←</kbd><kbd>→</kbd><span data-i18n="keyNav">Previous / Next</span></span>
+        </div>
+      </aside>
+
       <!-- Top bar: brand, quick actions, topic rail -->
       <header class="topbar" id="topbar">
         <div class="topbar-row">
@@ -55,6 +82,7 @@
             <span class="brand-mark"><i class="ri-headphone-fill"></i></span>
             <span class="brand-name">ListenPro</span>
           </div>
+          <span class="topbar-title" id="topbarTitle" aria-hidden="true"></span>
           <div class="topbar-actions">
             <button
               id="btnWordbook"
@@ -91,6 +119,7 @@
       <main class="stage">
         <!-- Current topic + level filter -->
         <section class="topic-head" id="topicHead">
+          <span class="topic-head-art" id="topicHeadArt" aria-hidden="true"></span>
           <span class="topic-head-icon" id="topicHeadIcon"><i class="ri-apps-2-line"></i></span>
           <div class="topic-head-text">
             <h1 id="topicTitle">&nbsp;</h1>
@@ -101,6 +130,8 @@
             <span id="levelLabel">All</span>
             <i class="ri-arrow-down-s-line"></i>
           </button>
+          <!-- Wide layout: levels shown inline instead of the dropdown -->
+          <div class="level-seg" id="levelSeg" role="radiogroup" aria-label="Level"></div>
         </section>
 
         <!-- Conversation list -->
@@ -115,6 +146,38 @@
           <li class="msg-skeleton is-b"><span class="sk-avatar"></span><span class="sk-bubble"></span></li>
         </ul>
       </main>
+
+      <!-- Current-line stage: wide layout only (≥1024px). The player dock and word card sit inside it. -->
+      <aside class="now-panel" id="nowPanel" aria-label="Current line">
+        <div class="np-top">
+          <span class="np-label"><span class="np-dot"></span><span data-i18n="npLabel">Current line</span></span>
+          <span class="np-topic" id="npTopic"></span>
+        </div>
+        <div class="np-main" id="npMain">
+          <div class="np-wave" id="npWave" aria-hidden="true"></div>
+          <div class="np-speaker">
+            <span class="np-avatar" id="npAvatar">A</span>
+            <span class="np-who" id="npWho"></span>
+            <span class="msg-level" id="npLevel"></span>
+          </div>
+          <p class="np-text" id="npText"></p>
+          <div class="np-cn-wrap" id="npCnWrap">
+            <p class="np-cn" id="npCn"></p>
+            <span class="np-cn-hint"><i class="ri-eye-line"></i><span data-i18n="revealCn">Click to show the translation</span></span>
+          </div>
+          <div class="np-tools">
+            <span class="np-index" id="npIndex"></span>
+            <span class="spacer"></span>
+            <button class="np-tool" type="button" data-np="replay"><i class="ri-restart-line"></i><span data-i18n="replay">Replay</span></button>
+            <button class="np-tool" type="button" data-np="cn" id="npCnBtn"><i class="ri-translate-2"></i><span data-i18n="translation">Translation</span></button>
+          </div>
+        </div>
+        <button class="np-next" id="npNext" type="button">
+          <span class="np-next-label" data-i18n="upNext">Up next</span>
+          <span class="np-next-text" id="npNextText"></span>
+        </button>
+        <div class="np-dock-space" aria-hidden="true"></div>
+      </aside>
 
       <!-- Appears when the current sentence is scrolled out of view -->
       <button class="locate-pill" id="btnLocate" type="button">

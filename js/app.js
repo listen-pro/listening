@@ -99,6 +99,10 @@
       installLater: "Later",
       language: "Language",
       logout: "Log out",
+      keyPlay: "Play / Pause", keyNav: "Previous / Next",
+      npLabel: "Current line", upNext: "Up next", lastLine: "This is the last line",
+      speaker: s => `Speaker ${s}`, revealCn: "Click to show the translation",
+      sideUserSub: "Settings & stats",
       titleMode: "Play mode", titlePrev: "Previous", titleNext: "Next", titlePlay: "Play / Pause", titleSpeed: "Speed"
     },
     zh: {
@@ -137,6 +141,10 @@
       installLater: "稍后",
       language: "界面语言",
       logout: "退出登录",
+      keyPlay: "播放 / 暂停", keyNav: "上一句 / 下一句",
+      npLabel: "当前句子", upNext: "下一句", lastLine: "已经是最后一句",
+      speaker: s => `角色 ${s}`, revealCn: "点击显示译文",
+      sideUserSub: "设置与统计",
       titleMode: "播放模式", titlePrev: "上一句", titleNext: "下一句", titlePlay: "播放 / 暂停", titleSpeed: "语速"
     }
   };
@@ -173,6 +181,9 @@
   const locatePill = $('btnLocate');
   const scrim = $('scrim');
   const toastEl = $('toast');
+  // Keep in sync with the "WIDE" breakpoint in css/style.css (sidebar + current-line panel).
+  const wideQuery = window.matchMedia('(min-width: 1024px)');
+  const nowPanel = $('nowPanel');
   let deferredInstallPrompt = null;
   let installPromptEl = null;
   const INSTALL_DISMISS_KEY = 'lp_install_prompt_dismissed_v1';
@@ -421,7 +432,7 @@
       const active = state.topic === id;
       return `<button class="chip${active ? ' active' : ''}" role="tab" aria-selected="${active}" data-topic="${id}" style="--h:${hue}"><i class="${icon}"></i>${escapeHtml(label)}</button>`;
     };
-    let html = chip('all', 'ri-stack-line', 258, t('allTopics'));
+    let html = chip('all', 'ri-stack-line', 'var(--all-h)', t('allTopics'));
     let lastScene = null;
     visibleTopics.forEach(topic => {
       if (lastScene && topic.scene !== lastScene) html += '<span class="chip-divider" aria-hidden="true"></span>';
@@ -429,6 +440,32 @@
       html += chip(topic.id, topic.icon, topic.hue, topicName(topic));
     });
     topicRail.innerHTML = html;
+    renderSidebar();
+  }
+
+  // Wide layout (iPad landscape / desktop) lists topics in a sidebar instead of the rail.
+  function renderSidebar() {
+    const nav = $('sideNav');
+    if (!nav) return;
+    const item = (id, icon, hue, label, count) => {
+      const active = state.topic === id;
+      return `<button class="side-item${active ? ' active' : ''}" data-topic="${id}" style="--h:${hue}"${active ? ' aria-current="page"' : ''}>
+        <span class="side-icon"><i class="${icon}"></i></span>
+        <span class="side-name">${escapeHtml(label)}</span>
+        <span class="side-count">${count}</span>
+      </button>`;
+    };
+    let html = item('all', 'ri-stack-line', 'var(--all-h)', t('allTopics'), state.sentences.length);
+    const groups = [
+      { label: t('sceneDaily'), items: visibleTopics.filter(tp => tp.scene !== 'business') },
+      { label: t('sceneBusiness'), items: visibleTopics.filter(tp => tp.scene === 'business') }
+    ];
+    groups.forEach(group => {
+      if (!group.items.length) return;
+      html += `<h3 class="side-group">${escapeHtml(group.label)}</h3>`;
+      html += group.items.map(tp => item(tp.id, tp.icon, tp.hue, topicName(tp), topicCounts[tp.id])).join('');
+    });
+    nav.innerHTML = html;
   }
 
   function scrollActiveChipIntoView(smooth = false) {
@@ -442,9 +479,16 @@
 
   function renderTopicHead() {
     const topic = state.topic === 'all' ? null : topicById(state.topic);
-    $('topicHead').style.setProperty('--h', topic ? topic.hue : 258);
-    $('topicHeadIcon').innerHTML = `<i class="${topic ? topic.icon : 'ri-stack-line'}"></i>`;
+    const hue = topic ? topic.hue : 'var(--all-h)';
+    $('topicHead').style.setProperty('--h', hue);
+    $('nowPanel').style.setProperty('--h', hue);
+    const icon = `<i class="${topic ? topic.icon : 'ri-stack-line'}"></i>`;
+    $('topicHeadIcon').innerHTML = icon;
+    $('topicHeadArt').innerHTML = icon;
+    $('npTopic').textContent = topicName(topic);
+    renderLevelSeg();
     $('topicTitle').textContent = topicName(topic);
+    $('topbarTitle').textContent = topicName(topic);
     const count = t('unitSentences')(state.filtered.length);
     $('topicMeta').textContent = topic
       ? `${topicAltName(topic)} · ${count}`
@@ -553,6 +597,21 @@
     $('levelPopover').innerHTML = `<div class="pop-title">${escapeHtml(t('levelTitle'))}</div>` + ['all', ...LEVELS].map(item).join('');
   }
 
+  // Wide layout: the same level choices as the popover, laid out inline in the topic banner.
+  function renderLevelSeg() {
+    const pool = sentencesInTopic(state.topic);
+    const btn = level => {
+      const count = level === 'all' ? pool.length : pool.filter(s => s.level === level).length;
+      const active = state.levelFilter === level;
+      const label = level === 'all' ? t('allLevels') : LEVEL_CEFR[level];
+      const title = level === 'all' ? '' : ` title="${escapeHtml(t('lvl_' + level))}"`;
+      return `<button class="lvl-opt${active ? ' active' : ''}" type="button" role="radio" aria-checked="${active}" data-level="${level}"${title}${count ? '' : ' disabled'}>
+        ${level === 'all' ? '' : `<span class="lvl-dot ${level}"></span>`}<span>${escapeHtml(label)}</span><span class="lvl-count">${count}</span>
+      </button>`;
+    };
+    $('levelSeg').innerHTML = ['all', ...LEVELS].map(btn).join('');
+  }
+
   // ---- Render Conversation (Lazy Loading) ----
   let listObserver = null;
   const LIST_BATCH_SIZE = 50;
@@ -595,6 +654,7 @@
   function toggleActiveTranslation() {
     state.showCn = !state.showCn;
     localStorage.setItem('lp_showCn', state.showCn);
+    syncStageTranslation();
     if (!activeEl) return;
     // Patch in place so the bubble does not replay its entrance animation.
     const s = state.filtered[state.currentIndex];
@@ -689,7 +749,8 @@
 
   function visibleBand() {
     const top = topbar ? topbar.getBoundingClientRect().bottom : 0;
-    const bottom = dock ? dock.getBoundingClientRect().top : window.innerHeight;
+    // In the wide layout the dock lives in the side panel, so the list has the full height.
+    const bottom = dock && !wideQuery.matches ? dock.getBoundingClientRect().top : window.innerHeight;
     return { top, bottom };
   }
 
@@ -718,8 +779,92 @@
     $('locateIcon').className = above ? 'ri-arrow-up-line' : 'ri-arrow-down-line';
   }
 
+  // ---- Current-line stage (wide layout) ----
+  // Hidden translations stay blurred in place so the learner can reveal them on demand.
+  function syncStageTranslation() {
+    const wrap = $('npCnWrap');
+    const hidden = !state.showCn;
+    wrap.classList.toggle('is-hidden', hidden);
+    if (hidden) {
+      wrap.setAttribute('role', 'button');
+      wrap.tabIndex = 0;
+    } else {
+      wrap.removeAttribute('role');
+      wrap.removeAttribute('tabindex');
+    }
+    $('npCnBtn').classList.toggle('on', state.showCn);
+    $('npCnBtn').setAttribute('aria-pressed', String(state.showCn));
+  }
+
+  // A voice-memo style waveform. Shape is seeded by the sentence id, so a line always
+  // looks the same; the coloured copy is revealed by playback progress (--p).
+  function renderWave(s) {
+    let seed = (Number(s.id) || 1) * 2654435761 >>> 0;
+    const rand = () => {
+      seed = (seed + 0x6d2b79f5) >>> 0;
+      let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+    const n = 44;
+    let bars = '';
+    for (let i = 0; i < n; i++) {
+      const envelope = Math.pow(Math.sin(Math.PI * (i + 0.5) / n), 0.55);
+      const v = Math.max(0.12, envelope * (0.3 + 0.7 * rand()));
+      bars += `<i style="--v:${v.toFixed(2)};--d:${(i % 7) * -0.13}s"></i>`;
+    }
+    $('npWave').innerHTML = `<div class="np-wave-base">${bars}</div><div class="np-wave-fill">${bars}</div>`;
+  }
+
+  let stageSentenceId = null;
+
+  function renderStage() {
+    const panel = nowPanel;
+    const s = state.filtered[state.currentIndex];
+    panel.classList.toggle('is-empty', !s);
+    // A different line starts with an empty waveform; a re-render of the same line keeps its progress.
+    const id = s ? s.id : null;
+    if (id !== stageSentenceId) panel.style.setProperty('--p', '0%');
+    stageSentenceId = id;
+    if (!s) {
+      $('npText').textContent = t('emptyList');
+      $('npCn').textContent = '';
+      $('npWave').innerHTML = '';
+      $('npNextText').textContent = '';
+      $('npNext').disabled = true;
+      return;
+    }
+    const speaker = speakerOf(s.text) || 'A';
+    const text = stripSpeakerLabel(s.text);
+    panel.classList.toggle('side-b', speaker === 'B');
+    $('npAvatar').textContent = speaker;
+    $('npWho').textContent = t('speaker')(speaker);
+    const level = $('npLevel');
+    level.className = `msg-level ${s.level}`;
+    level.textContent = LEVEL_CEFR[s.level] || s.level;
+    const npText = $('npText');
+    npText.innerHTML = buildWordsHtml(text);
+    npText.classList.toggle('is-long', text.length > 90);
+    // Fresh line: replay the entrance animation.
+    if (panel.dataset.lineId !== String(s.id)) {
+      panel.dataset.lineId = String(s.id);
+      npText.classList.remove('enter');
+      void npText.offsetWidth;
+      npText.classList.add('enter');
+    }
+    $('npCn').textContent = stripSpeakerLabel(s.cn || '');
+    $('npCnWrap').hidden = !s.cn;
+    syncStageTranslation();
+    $('npIndex').textContent = `${state.currentIndex + 1} / ${state.filtered.length}`;
+    renderWave(s);
+    const next = state.filtered[state.currentIndex + 1];
+    $('npNext').disabled = !next;
+    $('npNextText').textContent = next ? stripSpeakerLabel(next.text) : t('lastLine');
+  }
+
   // ---- Display Current Sentence ----
   function updateDisplay(follow = 'soft') {
+    renderStage();
     if (state.currentIndex < 0 || state.filtered.length === 0) {
       activeEl = null;
       updateLocatePill();
@@ -1018,7 +1163,10 @@
 
   // Late media events can fire after stop(); only a reset may move the bar then.
   function setProgress(pct) {
-    if (pct === 0 || audio.isPlaying) progressBar.style.width = pct + '%';
+    if (pct === 0 || audio.isPlaying) {
+      progressBar.style.width = pct + '%';
+      nowPanel.style.setProperty('--p', pct + '%');
+    }
   }
 
   function clearLoopTimer() {
@@ -1176,14 +1324,17 @@
   function closeWordPopup() {
     wordPopup.classList.remove('show');
     document.body.classList.remove('popup-open');
-    sentenceList.querySelectorAll('.word.looked').forEach(el => el.classList.remove('looked'));
+    document.querySelectorAll('.word.looked').forEach(el => el.classList.remove('looked'));
   }
 
   function keepActiveAbovePopup() {
     // Nudge the page so the highlighted line stays readable above the word card.
     requestAnimationFrame(() => {
+      // Wide layout: the card opens in the side panel and never covers the list.
+      if (wideQuery.matches) return;
       if (!activeEl || !wordPopup.classList.contains('show')) return;
-      const popupTop = window.innerHeight - wordPopup.offsetHeight;
+      // On tablet / desktop the card floats above the dock, so measure where it really is.
+      const popupTop = wordPopup.getBoundingClientRect().top;
       const overlap = activeEl.getBoundingClientRect().bottom - (popupTop - 16);
       if (overlap > 0) window.scrollBy({ top: overlap, behavior: 'smooth' });
     });
@@ -1218,7 +1369,7 @@
     $('popupFav').classList.toggle('saved', isSaved);
 
     if (sourceEl) {
-      sentenceList.querySelectorAll('.word.looked').forEach(el => el.classList.remove('looked'));
+      document.querySelectorAll('.word.looked').forEach(el => el.classList.remove('looked'));
       sourceEl.classList.add('looked');
     }
     closePopover();
@@ -1259,6 +1410,8 @@
 
   // ---- Sheets ----
   let openSheetEl = null;
+  // Keep in sync with the "TABLET" breakpoint in css/style.css.
+  const formSheetQuery = window.matchMedia('(min-width: 720px)');
 
   function openSheet(id) {
     const el = $(id);
@@ -1292,6 +1445,8 @@
       let dragging = false;
       const onStart = e => {
         if (e.target.closest('button')) return;
+        // From 720px up sheets are centred dialogs; swipe-to-dismiss is a phone gesture.
+        if (formSheetQuery.matches) return;
         dragging = true;
         dy = 0;
         startY = e.touches[0].clientY;
@@ -1334,10 +1489,11 @@
 
   // ---- Wordbook ----
   function updateWordbookBadge() {
-    const badge = $('wordbookBadge');
     const n = state.wordbook.length;
-    badge.hidden = n === 0;
-    badge.textContent = n > 99 ? '99+' : String(n);
+    [$('wordbookBadge'), $('sideWordbookBadge')].forEach(badge => {
+      badge.hidden = n === 0;
+      badge.textContent = n > 99 ? '99+' : String(n);
+    });
     $('wordbookSub').textContent = t('wordbookCount')(n);
   }
 
@@ -1463,6 +1619,7 @@
     if (activeEl && activeEl.isConnected && state.filtered[state.currentIndex]) {
       renderMsg(activeEl, state.filtered[state.currentIndex], state.currentIndex, true);
     }
+    renderStage();
 
     const popupWord = $('popupWord').textContent;
     if (wordPopup.classList.contains('show') && popupWord) {
@@ -1497,6 +1654,8 @@
     $('avatarInitial').textContent = initial;
     $('profileAvatar').textContent = initial;
     $('profileName').textContent = name || 'ListenPro';
+    $('sideAvatar').textContent = initial;
+    $('sideUserName').textContent = name || 'ListenPro';
   }
 
   function setupPersonalization() {
@@ -1554,7 +1713,7 @@
     }
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
-      metaThemeColor.setAttribute('content', state.theme === 'light' ? '#f4f5f9' : '#0b0b12');
+      metaThemeColor.setAttribute('content', state.theme === 'light' ? '#f2f2f7' : '#0b0b12');
     }
     document.querySelectorAll('#themeControl .seg-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.themeValue === state.theme);
@@ -1583,6 +1742,13 @@
       scrollActiveChipIntoView(true);
     });
 
+    $('sideNav').addEventListener('click', e => {
+      const item = e.target.closest('[data-topic]');
+      if (!item) return;
+      setTopic(item.dataset.topic);
+      scrollActiveChipIntoView(false);
+    });
+
     $('btnTopicSheet').addEventListener('click', () => {
       renderTopicSheet();
       openSheet('topicSheet');
@@ -1600,6 +1766,12 @@
       e.stopPropagation();
       renderLevelPopover();
       openPopover($('levelPopover'), $('btnLevel'), 'below');
+    });
+
+    $('levelSeg').addEventListener('click', e => {
+      const opt = e.target.closest('[data-level]');
+      if (!opt || opt.disabled) return;
+      setLevel(opt.dataset.level);
     });
 
     $('levelPopover').addEventListener('click', e => {
@@ -1650,6 +1822,39 @@
     });
   }
 
+  function setupStage() {
+    const panel = $('nowPanel');
+    panel.addEventListener('click', e => {
+      const wordEl = e.target.closest('.word');
+      if (wordEl) {
+        showWordPopup(wordEl.dataset.word, wordEl);
+        return;
+      }
+      const tool = e.target.closest('[data-np]');
+      if (tool && state.currentIndex >= 0) {
+        if (tool.dataset.np === 'replay') selectSentence(state.currentIndex);
+        else if (tool.dataset.np === 'cn') toggleActiveTranslation();
+        return;
+      }
+      if (e.target.closest('#npCnWrap.is-hidden')) {
+        toggleActiveTranslation();
+        return;
+      }
+      // Clicking the button (not playNext directly) keeps auth-guard's check in the loop.
+      if (e.target.closest('#npNext') && !$('npNext').disabled) $('btnNext').click();
+    });
+    $('npCnWrap').addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && $('npCnWrap').classList.contains('is-hidden')) {
+        e.preventDefault();
+        e.stopPropagation(); // Space must not also toggle playback
+        toggleActiveTranslation();
+      }
+    });
+    // Sidebar footer mirrors the top-bar buttons, which are hidden in the wide layout.
+    $('btnSideUser').addEventListener('click', () => $('btnMenu').click());
+    $('btnSideWordbook').addEventListener('click', () => $('btnWordbook').click());
+  }
+
   function setupScrollTracking() {
     const markUserScroll = () => { lastUserScrollAt = Date.now(); };
     window.addEventListener('touchmove', markUserScroll, { passive: true });
@@ -1663,6 +1868,9 @@
       requestAnimationFrame(() => {
         ticking = false;
         topbar.classList.toggle('scrolled', window.scrollY > 4);
+        // Wide layout: the floating title capsule appears once the topic banner is gone.
+        const head = $('topicHead');
+        topbar.classList.toggle('show-title', window.scrollY > head.offsetTop + head.offsetHeight - 40);
         updateLocatePill();
       });
     }, { passive: true });
@@ -1716,6 +1924,7 @@
     setupFontSize();
     setupWordPopup();
     setupList();
+    setupStage();
     setupScrollTracking();
     setupKeyboard();
     startSessionTimer();
