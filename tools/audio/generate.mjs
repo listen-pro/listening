@@ -32,6 +32,8 @@ function voiceFor(lang, sentence) {
 
 const limitArg = process.argv.indexOf('--limit');
 const LIMIT = limitArg >= 0 ? Number(process.argv[limitArg + 1]) : Infinity;
+const topicArg = process.argv.indexOf('--topic');
+const TOPIC = topicArg >= 0 ? process.argv[topicArg + 1] : '';
 
 function loadSentences() {
   const src = fs.readFileSync(path.join(ROOT, 'js/data.js'), 'utf8');
@@ -163,7 +165,7 @@ class VoiceLane {
 
   async connect() {
     if (this.client) return;
-    const client = new MsEdgeTTS();
+    const client = new MsEdgeTTS({ connectionTimeoutMs: 30000 });
     await client.setMetadata(this.voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
     this.client = client;
   }
@@ -189,7 +191,7 @@ class VoiceLane {
         await Promise.race([
           pipeline(audioStream, createWriteStream(mp3Path)),
           new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('synthesis timed out')), 30000);
+            setTimeout(() => reject(new Error('synthesis timed out')), 60000);
           })
         ]);
         if (!fs.existsSync(mp3Path) || fs.statSync(mp3Path).size < 500) {
@@ -215,7 +217,8 @@ class VoiceLane {
 
 async function main() {
   const sentences = loadSentences().slice().sort((a, b) => sentenceRank(a) - sentenceRank(b));
-  const selected = Number.isFinite(LIMIT) ? sentences.slice(0, LIMIT) : sentences;
+  const filtered = TOPIC ? sentences.filter(sentence => sentence.topic === TOPIC) : sentences;
+  const selected = Number.isFinite(LIMIT) ? filtered.slice(0, LIMIT) : filtered;
   const catalog = {
     'en-us': new Set(listStems(path.join(AUDIO_ROOT, 'en-us'))),
     'en-gb': new Set(listStems(path.join(AUDIO_ROOT, 'en-gb'))),
@@ -227,7 +230,7 @@ async function main() {
 
   const lanes = {};
   for (const [key, voiceName] of Object.entries(VOICES)) {
-    lanes[key] = [new VoiceLane(voiceName), new VoiceLane(voiceName)];
+    lanes[key] = [new VoiceLane(voiceName)];
   }
   const laneCursor = Object.fromEntries(Object.keys(VOICES).map(key => [key, 0]));
   const jobs = [];
@@ -257,7 +260,7 @@ async function main() {
   }
 
   const wordMap = new Map();
-  const includeWords = process.argv.includes('--words') || !Number.isFinite(LIMIT);
+  const includeWords = process.argv.includes('--words') || (!Number.isFinite(LIMIT) && !TOPIC);
   if (includeWords) for (const sentence of sentences) {
     const tokens = stripSpeakerLabel(sentence.text).match(/[A-Za-z]+(?:['-][A-Za-z]+)*/g) || [];
     for (const token of tokens) {

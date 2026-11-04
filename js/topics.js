@@ -15,5 +15,6 @@ const TOPICS = [
   { id: 'help', scene: 'daily', icon: 'ri-hand-heart-line', hue: 245, name: { zh: '沟通求助', en: 'Asking for Help' } },
   { id: 'work', scene: 'daily', icon: 'ri-book-open-line', hue: 100, name: { zh: '工作学习', en: 'Work & Study' } },
   { id: 'teamwork', scene: 'business', icon: 'ri-team-line', hue: 200, name: { zh: '项目协作', en: 'Teamwork' } },
-  { id: 'strategy', scene: 'business', icon: 'ri-line-chart-line', hue: 36, name: { zh: '战略研讨', en: 'Strategy' } }
+  { id: 'strategy', scene: 'business', icon: 'ri-line-chart-line', hue: 36, name: { zh: '战略研讨', en: 'Strategy' } },
+  { id: 'it', scene: 'business', icon: 'ri-terminal-box-line', hue: 172, name: { zh: 'IT 商务', en: 'IT Business' } }
 ];
