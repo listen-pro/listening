@@ -1,9 +1,11 @@
-const CACHE_NAME = 'listen-pro-v1.27';
+const CACHE_NAME = 'listen-pro-v1.28';
 const ASSETS = [
   './',
   './index.html',
   './login.html',
+  './css/fonts.css',
   './css/style.css',
+  './fonts/inter-latin-wght-normal.woff2',
   './js/data.js',
   './js/topics.js',
   './js/dictionary.js',
