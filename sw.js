@@ -1,4 +1,4 @@
-const CACHE_NAME = 'listen-pro-v1.22';
+const CACHE_NAME = 'listen-pro-v1.24';
 const ASSETS = [
   './',
   './index.html',

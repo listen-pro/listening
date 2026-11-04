@@ -11,12 +11,12 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const AUDIO_ROOT = path.join(ROOT, 'audio');
 const TMP_ROOT = path.join(ROOT, 'tools/audio/.tmp');
 const VOICES = {
-  'en-us-m': 'en-US-GuyNeural',
-  'en-us-f': 'en-US-AriaNeural',
+  'en-us-m': 'en-US-AndrewNeural',
+  'en-us-f': 'en-US-JennyNeural',
   'en-gb-m': 'en-GB-RyanNeural',
   'en-gb-f': 'en-GB-SoniaNeural',
-  'zh-m': 'zh-CN-YunxiNeural',
-  'zh-f': 'zh-CN-XiaoxiaoNeural'
+  'zh-m': 'zh-CN-YunyangNeural',
+  'zh-f': 'zh-CN-XiaoxuanNeural'
 };
 
 function speakerRole(sentence) {

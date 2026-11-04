@@ -872,8 +872,8 @@
 
   function buildMediaTracks(sentence, rates) {
     const enKey = state.accent === 'uk' ? 'en-gb' : 'en-us';
-    const enSrc = `audio/${enKey}/${sentence.id}.m4a?v=3`;
-    const zhSrc = `audio/zh/${sentence.id}.m4a?v=3`;
+    const enSrc = `audio/${enKey}/${sentence.id}.m4a?v=4`;
+    const zhSrc = `audio/zh/${sentence.id}.m4a?v=4`;
     const gap = 'audio/ui/gap-pass.m4a';
     const title = sentence.text;
     const tracks = [];
