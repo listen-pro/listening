@@ -1147,6 +1147,29 @@ body.is-playing .dock-play {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding: 0 20px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--primary) 72%, transparent) transparent;
+}
+
+.sheet-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sheet-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sheet-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--primary) 72%, transparent);
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background-clip: padding-box;
+}
+
+.sheet-body::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+  background-clip: padding-box;
+  border: 2px solid transparent;
 }
 
 .sheet-group {
