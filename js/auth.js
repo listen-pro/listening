@@ -123,11 +123,16 @@
     sessionStorage.removeItem(AUTH_KEY);
   }
 
+  var authToastShown = false;
+
   function showAuthToastAndRedirect() {
     if (window.location.href.includes('login.html')) {
       redirectToLogin();
       return;
     }
+    // Several checks can fail at once (page load + a play tap); show one toast, redirect once.
+    if (authToastShown) return;
+    authToastShown = true;
     
     var currentLang = localStorage.getItem('lp_lang') || 'en';
     var msg = currentLang === 'en' 
@@ -170,13 +175,14 @@
       toast.style.transform = 'translate(-50%, 0)';
     });
     
-    // setTimeout(function() {
-    //   toast.style.opacity = '0';
-    //   toast.style.transform = 'translate(-50%, -10px)';
-    //   setTimeout(function() {
-    //     redirectToLogin();
-    //   }, 300);
-    // }, 2000);
+    // Give the learner a moment to read why, then go to the login page.
+    setTimeout(function() {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translate(-50%, -10px)';
+      setTimeout(function() {
+        redirectToLogin();
+      }, 300);
+    }, 2000);
   }
 
   /**

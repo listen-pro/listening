@@ -35,6 +35,10 @@ class AudioEngine {
     this.onMediaPlay = null;
     this.onMediaPrev = null;
     this.onMediaNext = null;
+    // Optional src -> ready URL mapping (offline downloads are played from blob: URLs).
+    this.resolveSrc = null;
+    this._clip = null;
+    this._clipToken = 0;
     this._enablePlaybackSession();
     this._initVoice();
   }
@@ -176,6 +180,7 @@ class AudioEngine {
       this._media.pause();
       this._media.removeAttribute('src');
     }
+    this.stopClip();
     this.synth.cancel();
     this.isPlaying = false;
     this._stopProgress();
@@ -320,6 +325,56 @@ class AudioEngine {
     this.synth.speak(utt);
   }
 
+  // Plays one short recorded clip (a word) on its own element, so the sentence queue is untouched.
+  // onEnd(true) when it finished, onEnd(false) if it could not be played.
+  playClip(src, onEnd, options = {}) {
+    if (!this._clip) {
+      this._clip = new Audio();
+      this._clip.preload = 'auto';
+      this._clip.setAttribute('playsinline', '');
+    }
+    const el = this._clip;
+    const token = ++this._clipToken;
+    let guard = null;
+    const done = ok => {
+      if (token !== this._clipToken) return;
+      this._clipToken++;
+      clearTimeout(guard);
+      el.onended = null;
+      el.onerror = null;
+      el.onloadedmetadata = null;
+      if (onEnd) onEnd(ok);
+    };
+    el.onended = () => done(true);
+    el.onerror = () => done(false);
+    // Safety net: if 'ended' never arrives (stalled load, interrupted session), finish anyway
+    // so callers waiting on the clip (shadowing, compare, word card) do not hang.
+    guard = setTimeout(() => done(false), 10000);
+    el.onloadedmetadata = () => {
+      if (token !== this._clipToken || !Number.isFinite(el.duration)) return;
+      clearTimeout(guard);
+      guard = setTimeout(() => done(true), (el.duration / (el.playbackRate || 1)) * 1000 + 1500);
+    };
+    el.src = (this.resolveSrc && this.resolveSrc(src)) || src;
+    const rate = typeof options.rate === 'number' ? Math.min(2, Math.max(0.5, options.rate)) : 1;
+    try {
+      el.preservesPitch = true;
+      el.defaultPlaybackRate = rate;
+      el.playbackRate = rate;
+    } catch (e) {}
+    const pending = el.play();
+    if (pending && pending.catch) pending.catch(() => done(false));
+  }
+
+  stopClip() {
+    if (!this._clip) return;
+    this._clipToken++;
+    this._clip.onended = null;
+    this._clip.onerror = null;
+    this._clip.onloadedmetadata = null;
+    this._clip.pause();
+  }
+
   playPromptSound(callback) {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -395,7 +450,9 @@ class AudioEngine {
     const el = this._ensureMedia();
     el.dataset.token = String(token);
     if (track.title) this._updateSessionMetadata(track);
-    const absolute = new URL(track.src, window.location.href).href;
+    // A downloaded copy (blob: URL) wins over the network file.
+    const src = (this.resolveSrc && this.resolveSrc(track.src)) || track.src;
+    const absolute = new URL(src, window.location.href).href;
     const start = () => {
       if (this._activeToken !== token) return;
       this._applyRate(track);
@@ -421,7 +478,7 @@ class AudioEngine {
       if (this._activeToken !== token) return;
       this._applyRate(track);
     };
-    el.src = track.src;
+    el.src = src;
     start();
   }
 

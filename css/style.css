@@ -3428,3 +3428,541 @@ html.theme-transition *:after {
     background: var(--surface-2);
   }
 }
+
+/* ==================== OFFLINE DOWNLOAD BUTTON (topic head) ==================== */
+.dl-btn {
+  --dl: 0%;
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 17px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.15s, color 0.2s, border-color 0.2s;
+}
+
+.dl-btn[hidden] {
+  display: none;
+}
+
+.dl-btn:active {
+  transform: scale(0.92);
+}
+
+.dl-btn[data-state="done"] {
+  color: var(--lvl-elementary);
+  border-color: color-mix(in srgb, var(--lvl-elementary) 40%, transparent);
+}
+
+.dl-btn[data-state="partial"] {
+  color: var(--primary-strong);
+}
+
+/* Downloading: a progress ring with the percentage inside */
+.dl-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  display: none;
+  background: conic-gradient(var(--primary) var(--dl), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+}
+
+.dl-pct {
+  display: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-btn[data-state="loading"] {
+  cursor: default;
+}
+
+.dl-btn[data-state="loading"] .dl-ring,
+.dl-btn[data-state="loading"] .dl-pct {
+  display: block;
+}
+
+.dl-btn[data-state="loading"] i {
+  display: none;
+}
+
+[data-theme="light"] .dl-btn {
+  border-color: transparent;
+  box-shadow: var(--control-shadow);
+}
+
+/* ==================== STATS ==================== */
+.stat-tiles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stat-value small {
+  margin-left: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text2);
+}
+
+.stat-totals {
+  margin: 10px 2px 0;
+  font-size: 12px;
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==================== SETTINGS: chips, values, text buttons ==================== */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.chip-opt {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, transform 0.15s;
+}
+
+.chip-opt:active {
+  transform: scale(0.95);
+}
+
+.chip-opt.active {
+  background: var(--primary);
+  border-color: transparent;
+  color: #fff;
+}
+
+.set-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.text-btn {
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.text-btn[hidden] {
+  display: none;
+}
+
+/* ==================== BLIND LISTENING ==================== */
+/* English text stays blurred until the learner taps the current line. */
+.msg-text-wrap {
+  position: relative;
+}
+
+.msg-text {
+  transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+body.blind .msg:not(.revealed) .msg-text {
+  filter: blur(6px);
+  opacity: 0.55;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body.blind .msg.active:not(.revealed) .msg-text-wrap {
+  cursor: pointer;
+}
+
+.blind-hint {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 28px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.blind-hint i {
+  font-size: 15px;
+}
+
+[data-theme="light"] .blind-hint {
+  border-color: transparent;
+  box-shadow: var(--control-shadow);
+}
+
+/* Wide layout panel */
+.np-text-wrap {
+  position: relative;
+}
+
+.np-text-wrap .blind-hint {
+  display: none;
+}
+
+.np-text-wrap.is-hidden {
+  cursor: pointer;
+}
+
+.np-text-wrap.is-hidden .np-text {
+  filter: blur(10px);
+  opacity: 0.5;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.np-text-wrap.is-hidden .blind-hint {
+  display: inline-flex;
+  top: calc(50% + 9px); /* .np-text has an 18px top margin */
+}
+
+.now-panel.is-blind .np-next-text {
+  filter: blur(5px);
+}
+
+@media (min-width: 1024px) {
+  /* The download button sits at the right of the topic banner, beside the title. */
+  .topic-head {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon text dl"
+      "seg seg seg";
+  }
+
+  .dl-btn {
+    grid-area: dl;
+    width: 40px;
+    height: 40px;
+    font-size: 19px;
+  }
+}
+
+/* ==================== ROLE PLAY ==================== */
+/* The learner's lines carry a tag; during their turn a bar counts down the pause. */
+.turn-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.turn-tag i {
+  font-size: 12px;
+}
+
+.turn-bar {
+  display: none;
+  height: 3px;
+  margin-top: 10px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform-origin: left center;
+}
+
+body.your-turn .msg.active .turn-bar {
+  display: block;
+}
+
+body.your-turn .msg.active.turn-run .turn-bar {
+  animation: turnCountdown var(--turn, 5s) linear forwards;
+}
+
+body:not(.is-playing) .msg.active .turn-bar {
+  animation-play-state: paused;
+}
+
+body.your-turn .msg.active .msg-bubble {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+body.your-turn .msg.active .turn-tag {
+  animation: turnPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes turnCountdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@keyframes turnPulse {
+  50% { opacity: 0.45; }
+}
+
+/* ==================== PRACTICE SHEET ==================== */
+.practice-tabs {
+  display: flex;
+  width: 100%;
+  margin-bottom: 18px;
+}
+
+.practice-tabs .seg-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.practice-pane[hidden] {
+  display: none;
+}
+
+.practice-text {
+  font-size: calc(var(--fs) * 1.05);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.practice-cn {
+  margin-top: 6px;
+  font-size: calc(var(--fs) * 0.8);
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+.rec-stage {
+  margin: 22px 0 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.rec-btn {
+  width: 76px;
+  height: 76px;
+  border: none;
+  border-radius: 50%;
+  background: var(--gradient1);
+  color: #fff;
+  font-size: 32px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 14px 30px -12px var(--primary-glow);
+  transition: transform 0.15s, background 0.2s;
+}
+
+.rec-btn:active {
+  transform: scale(0.94);
+}
+
+.rec-btn[data-state="recording"] {
+  background: var(--danger);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 50%, transparent);
+  animation: recPulse 1.4s ease-out infinite;
+}
+
+.rec-btn[data-state="listening"] {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: none;
+}
+
+@keyframes recPulse {
+  70% { box-shadow: 0 0 0 16px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.rec-status {
+  min-height: 1.5em;
+  font-size: 13px;
+  color: var(--text2);
+  text-align: center;
+}
+
+.practice-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.practice-btn {
+  flex: 1;
+  height: 42px;
+  padding: 0 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: transform 0.15s, opacity 0.2s;
+}
+
+.practice-btn i {
+  font-size: 17px;
+  color: var(--text2);
+}
+
+.practice-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.practice-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.practice-btn.primary {
+  background: var(--primary);
+  border-color: transparent;
+  color: #fff;
+}
+
+.practice-btn.primary i {
+  color: #fff;
+}
+
+[data-theme="light"] .practice-btn:not(.primary) {
+  border-color: transparent;
+  box-shadow: var(--control-shadow);
+}
+
+.dict-input {
+  width: 100%;
+  margin: 14px 0 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px; /* 16px stops iOS from zooming into the field */
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.dict-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.dict-result {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  animation: fadeIn 0.3s ease;
+}
+
+.dict-result[hidden] {
+  display: none;
+}
+
+.dict-score {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.dict-score b {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.dict-score span {
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.dict-score.perfect b { color: var(--lvl-elementary); }
+.dict-score.good b { color: var(--lvl-intermediate); }
+.dict-score.low b { color: var(--danger); }
+
+.dict-answer {
+  font-size: calc(var(--fs) * 0.95);
+  line-height: 1.6;
+}
+
+.dw-hit {
+  color: var(--text);
+}
+
+.dw-miss {
+  color: var(--danger);
+  text-decoration: underline wavy color-mix(in srgb, var(--danger) 60%, transparent);
+  text-underline-offset: 4px;
+}
+
+.dict-extra {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.dict-extra s {
+  color: var(--text3);
+}
+
+.dict-cn {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-strong);
+  font-size: calc(var(--fs) * 0.8);
+  color: var(--text2);
+}
+
+/* Wide layout: the practice button joins the panel tools; let them wrap if the panel is narrow. */
+@media (min-width: 1024px) {
+  .np-tools {
+    flex-wrap: wrap;
+  }
+
+  .now-panel.is-mine .np-who {
+    color: var(--accent);
+  }
+
+  body.your-turn .now-panel .np-dot {
+    background: var(--accent);
+  }
+}

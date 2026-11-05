@@ -48,6 +48,33 @@
     return saved === 'all' || LEVELS.includes(saved) ? saved : 'all';
   }
 
+  // Listening stats. listenedSec counts only time with audio actually playing; days holds
+  // seconds per local date (YYYY-MM-DD) for "today" and the streak; heard lists line ids
+  // that were played to the end at least once; sentencesPlayed counts finished reads.
+  // Older saves (totalTime = minutes the page was open, sessionsCount) are dropped.
+  function readSavedStats() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('lp_stats') || '{}') || {}; } catch (_) {}
+    return {
+      listenedSec: Number(saved.listenedSec) || 0,
+      days: saved.days && typeof saved.days === 'object' ? saved.days : {},
+      heard: Array.isArray(saved.heard) ? saved.heard : [],
+      sentencesPlayed: Number(saved.sentencesPlayed) || 0
+    };
+  }
+
+  // Last line reached in each topic ({ topicId: sentenceId }), so the app reopens where the
+  // learner stopped. A topic that is played to the end is forgotten and starts from the top.
+  const POSITIONS_KEY = 'lp_positions';
+  function readSavedPositions() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(POSITIONS_KEY) || '{}');
+      return saved && typeof saved === 'object' ? saved : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
   // State
   const state = {
     sentences: [...SENTENCES],
@@ -58,11 +85,17 @@
     repeat: readSavedRepeat(),
     loopScope: readSavedLoopScope(),
     playsDone: 0,
+    positions: readSavedPositions(),
     speed: parseFloat(localStorage.getItem('lp_speed') || '0.75'),
     fontSize: parseInt(localStorage.getItem('lp_fontSize') || '18'),
     loopTimer: null,
     wordbook: JSON.parse(localStorage.getItem('lp_wordbook') || '[]'),
-    stats: JSON.parse(localStorage.getItem('lp_stats') || '{"totalTime":0,"sessionsCount":0,"sentencesPlayed":0,"startTime":null}'),
+    stats: readSavedStats(),
+    blind: localStorage.getItem('lp_blind') === 'true',
+    revealedId: null,
+    // Role play: the speaker the learner takes ('A' / 'B'), or null.
+    role: ['A', 'B'].includes(localStorage.getItem('lp_role')) ? localStorage.getItem('lp_role') : null,
+    practiceTab: localStorage.getItem('lp_practiceTab') === 'dictation' ? 'dictation' : 'shadow',
     lang: localStorage.getItem('lp_lang') || 'en',
     showCn: localStorage.getItem('lp_showCn') === 'true',
     speakCn: localStorage.getItem('lp_speakCn') === 'true',
@@ -87,10 +120,46 @@
       backToCurrent: "Now playing",
       replay: "Replay", translation: "Translation",
       emptyList: "No sentences here yet", emptyAction: "Show all levels",
+      resumeAt: n => `Picking up at line ${n}`,
       tipWord: "Tip: tap a word in the highlighted line to look it up",
       menuTitle: "Me", profileSub: "Keep your ears warm",
-      statsPlayed: "Plays", statsWords: "Saved words", statsTotal: "Library",
+      statsToday: "Today", statsStreak: "Day streak", statsHeard: "Lines heard", statsWords: "Saved words",
+      unitMin: "min", unitDay: "days",
+      statsTotals: (dur, n) => `${dur} listened in total · ${n} reads finished`,
+      durationMin: m => `${m} min`, durationHourMin: (h, m) => `${h} h ${m} min`,
       groupListening: "Listening", groupDisplay: "Display",
+      blindLabel: "Blind listening", blindShort: "Blind",
+      blindHint: "Hide the English text. Listen first, then tap a line to check it.",
+      blindOn: "Blind listening on: tap a line to show it", blindOff: "Text shown",
+      revealText: "Tap to show the text",
+      sleepLabel: "Sleep timer", sleepOff: "Off", sleepTopic: "End of topic",
+      sleepMinutes: m => `${m} min`, sleepLeft: m => `${m} min left`, sleepTopicLeft: "Stops after this topic",
+      sleepCancelled: "Sleep timer off", sleepDone: "Sleep timer: playback paused",
+      offlineLabel: "Offline audio", offlineClear: "Delete all",
+      offlineDownload: "Download this topic for offline listening", offlineResume: "Finish downloading this topic",
+      offlineLoading: "Downloading…", offlineReady: "Downloaded. Plays without network",
+      offlineDone: name => `${name} downloaded. It plays without network`,
+      offlineFailed: n => `${n} files failed. Check the network and try again`,
+      offlineRemoved: "Offline audio deleted",
+      offlineConfirmRemove: name => `Delete the offline audio for ${name}?`,
+      offlineConfirmClear: "Delete all offline audio?",
+      offlineEmpty: "Nothing downloaded yet. Use the download button next to a topic's title.",
+      offlineSummary: (size, topics) => `${size} used${topics.length ? ' · ' + topics.join(', ') : ''}`,
+      offlineUnsupported: "This browser can't keep audio offline",
+      offlineNoCatalog: "Open the app online once first",
+      practiceTitle: "Practise this line", practiceShort: "Practise",
+      shadowTab: "Shadowing", dictationTab: "Dictation",
+      playOriginal: "Original", playMine: "My take", playCompare: "Compare",
+      recHint: "Tap the mic: hear the line once, then say it",
+      recListenFirst: "Listen first…", recRecording: "Recording… tap to stop",
+      recDone: "Recorded. Tap Compare to hear the difference",
+      recDenied: "Microphone access was denied", recUnsupported: "This browser can't record audio",
+      dictPlay: "Play", dictSlow: "Slower", dictCheck: "Check", dictNext: "Next line",
+      dictPlaceholder: "Type what you hear",
+      dictScore: (c, n) => `${c} of ${n} words right`, dictExtra: "Extra words:",
+      roleLabel: "Role play", roleOff: "Off", roleA: "I'm A", roleB: "I'm B",
+      roleHint: "Your lines are not read aloud. Playback pauses so you can say them, then the dialogue goes on.",
+      roleYourLine: "Your line", roleOn: r => `Role play: you are ${r}`, roleOffToast: "Role play off",
       speakCnLabel: "Read Chinese aloud", speakCnHint: "After each English line, also play its Chinese translation.",
       speakCnOn: "Chinese read-aloud on", speakCnOff: "English only",
       loopScopeLabel: "Loop", loopScopeTopic: "This topic",
@@ -131,10 +200,46 @@
       backToCurrent: "回到当前句",
       replay: "重播", translation: "译文",
       emptyList: "这里还没有句子", emptyAction: "查看全部难度",
+      resumeAt: n => `从第 ${n} 句继续`,
       tipWord: "提示：点按高亮句子里的单词即可查词",
       menuTitle: "我的", profileSub: "每天听一点，耳朵会记住",
-      statsPlayed: "练习句次", statsWords: "收藏生词", statsTotal: "句库总量",
+      statsToday: "今日收听", statsStreak: "连续天数", statsHeard: "已听句子", statsWords: "收藏生词",
+      unitMin: "分钟", unitDay: "天",
+      statsTotals: (dur, n) => `累计收听 ${dur} · 完成 ${n} 句次`,
+      durationMin: m => `${m} 分钟`, durationHourMin: (h, m) => `${h} 小时 ${m} 分钟`,
       groupListening: "听力", groupDisplay: "显示",
+      blindLabel: "盲听模式", blindShort: "盲听",
+      blindHint: "隐藏英文原文。先听，再点按句子核对。",
+      blindOn: "已开启盲听：点按句子显示原文", blindOff: "已显示原文",
+      revealText: "点按显示原文",
+      sleepLabel: "定时关闭", sleepOff: "关闭", sleepTopic: "本话题播完",
+      sleepMinutes: m => `${m} 分钟`, sleepLeft: m => `还剩 ${m} 分钟`, sleepTopicLeft: "本话题播完后停止",
+      sleepCancelled: "已取消定时", sleepDone: "定时已到，已暂停播放",
+      offlineLabel: "离线音频", offlineClear: "全部删除",
+      offlineDownload: "下载本话题，离线也能听", offlineResume: "继续下载本话题",
+      offlineLoading: "正在下载…", offlineReady: "已下载，无网络也能播放",
+      offlineDone: name => `「${name}」已下载，可离线播放`,
+      offlineFailed: n => `${n} 个文件下载失败，请联网后重试`,
+      offlineRemoved: "已删除离线音频",
+      offlineConfirmRemove: name => `删除「${name}」的离线音频？`,
+      offlineConfirmClear: "删除全部离线音频？",
+      offlineEmpty: "还没有下载。点话题标题旁的下载按钮，离线也能听。",
+      offlineSummary: (size, topics) => `已占用 ${size}${topics.length ? ' · ' + topics.join('、') : ''}`,
+      offlineUnsupported: "当前浏览器不支持离线保存音频",
+      offlineNoCatalog: "请先联网打开一次",
+      practiceTitle: "练习这句", practiceShort: "练习",
+      shadowTab: "跟读", dictationTab: "听写",
+      playOriginal: "原声", playMine: "我的录音", playCompare: "对比",
+      recHint: "点麦克风：先听一遍原声，再跟着说",
+      recListenFirst: "先听原声…", recRecording: "录音中… 点击停止",
+      recDone: "录好了，点「对比」听听差别",
+      recDenied: "没有麦克风权限", recUnsupported: "当前浏览器不支持录音",
+      dictPlay: "播放", dictSlow: "慢速", dictCheck: "核对", dictNext: "下一句",
+      dictPlaceholder: "听到什么就写什么",
+      dictScore: (c, n) => `${n} 个词写对 ${c} 个`, dictExtra: "多写的词：",
+      roleLabel: "角色扮演", roleOff: "关闭", roleA: "我演 A", roleB: "我演 B",
+      roleHint: "你的台词不播放，留出时间让你说，之后对话继续。",
+      roleYourLine: "你的台词", roleOn: r => `角色扮演：你是 ${r}`, roleOffToast: "已关闭角色扮演",
       speakCnLabel: "朗读中文", speakCnHint: "每句英文读完后，再读一遍中文翻译。",
       speakCnOn: "已开启中文朗读", speakCnOff: "只读英文",
       loopScopeLabel: "循环范围", loopScopeTopic: "当前话题",
@@ -167,12 +272,25 @@
   };
 
   const audio = new AudioEngine();
-  let audioCatalog = null;
+  // Offline downloads are handed to the player as blob: URLs (see js/offline.js).
+  const offline = typeof OfflineAudio !== 'undefined' && OfflineAudio.supported ? OfflineAudio : null;
+  if (offline) audio.resolveSrc = src => offline.resolve(src);
+
+  // The last catalog seen is kept so a cold start without network still knows which files exist.
+  const CATALOG_KEY = 'lp_catalog';
+  let audioCatalog = (() => {
+    try { return JSON.parse(localStorage.getItem(CATALOG_KEY) || 'null'); } catch (_) { return null; }
+  })();
 
   function refreshAudioCatalog() {
     fetch('audio/catalog.json', { cache: 'no-store' })
-      .then(response => response.ok ? response.json() : null)
-      .then(data => { if (data) audioCatalog = data; })
+      .then(response => response.ok ? response.text() : null)
+      .then(text => {
+        if (!text) return;
+        const data = JSON.parse(text);
+        audioCatalog = data;
+        if (localStorage.getItem(CATALOG_KEY) !== text) localStorage.setItem(CATALOG_KEY, text);
+      })
       .catch(() => {});
   }
   refreshAudioCatalog();
@@ -332,22 +450,25 @@
     holder.querySelectorAll('.pron-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         interruptMainPlayback();
-        // Record whether main playback was active before interrupting
-        // const wasPlaying = audio.isPlaying;
-        // const resumeIndex = state.currentIndex;
-        // audio.stop(true); // silent stop — don't reset progress bar
-        // clearLoopTimer();
         const accent = btn.dataset.accent === 'uk' ? 'uk' : 'us';
         btn.classList.add('speaking');
-        audio.speakWord(word, () => {
-          btn.classList.remove('speaking');
-          // Resume sentence playback if it was running before
-          // if (wasPlaying && resumeIndex === state.currentIndex) {
-          //   playCurrent('loop');
-          //   updatePlayBtn(true);
-          // }
-        }, { voiceVariant: accent });
+        speakWordClip(word, accent, () => btn.classList.remove('speaking'));
       });
+    });
+  }
+
+  // Say one word: the recorded clip from audio/words/ (or words-uk/) when it exists,
+  // otherwise the system voice. The caller stops sentence playback first.
+  function speakWordClip(word, accent, onEnd) {
+    const src = wordClipSrc(word, accent);
+    const viaSpeech = () => audio.speakWord(word, onEnd, { voiceVariant: accent });
+    if (!src) {
+      viaSpeech();
+      return;
+    }
+    audio.playClip(src, ok => {
+      if (ok) onEnd();
+      else viaSpeech();
     });
   }
 
@@ -393,14 +514,41 @@
     return topicId === 'all' ? state.sentences : state.sentences.filter(s => topicOf(s) === topicId);
   }
 
+  // ---- Saved position per topic ----
+  function savePosition() {
+    const s = state.filtered[state.currentIndex];
+    if (!s) return;
+    if (state.positions[state.topic] === s.id) return;
+    state.positions[state.topic] = s.id;
+    localStorage.setItem(POSITIONS_KEY, JSON.stringify(state.positions));
+  }
+
+  function forgetPosition(topicId) {
+    if (!(topicId in state.positions)) return;
+    delete state.positions[topicId];
+    localStorage.setItem(POSITIONS_KEY, JSON.stringify(state.positions));
+  }
+
   // ---- Filter Logic ----
-  function applyFilters() {
+  // resume: go back to the line last reached in this topic (if it passes the level filter).
+  function applyFilters({ resume = true } = {}) {
     state.filtered = sentencesInTopic(state.topic)
       .filter(s => state.levelFilter === 'all' || s.level === state.levelFilter);
-    state.currentIndex = state.filtered.length > 0 ? 0 : -1;
+    let index = state.filtered.length > 0 ? 0 : -1;
+    if (resume && index === 0) {
+      const savedId = state.positions[state.topic];
+      const found = savedId == null ? -1 : state.filtered.findIndex(s => s.id === savedId);
+      if (found > 0) index = found;
+    }
+    state.currentIndex = index;
     renderList(true, true);
     renderTopicHead();
     updateDisplay('none');
+    if (index > 0) {
+      // Bring the resumed line into view once the list has laid out.
+      requestAnimationFrame(() => followActive('force'));
+      showToast(t('resumeAt')(index + 1), 'ri-history-line');
+    }
   }
 
   function stopForFilterChange() {
@@ -411,11 +559,14 @@
     closePopover();
   }
 
-  function setTopic(topicId) {
+  // fromStart: begin at the first line instead of where this topic was left
+  // (used when playback rolls on into the next topic).
+  function setTopic(topicId, { fromStart = false } = {}) {
     if (topicId !== 'all' && !topicById(topicId)) topicId = 'all';
     if (topicId === state.topic) return false;
     state.topic = topicId;
     localStorage.setItem('lp_topic', topicId);
+    if (fromStart) forgetPosition(topicId);
     // Keep the chosen level if the new topic has it; otherwise fall back to all levels.
     if (state.levelFilter !== 'all' && !sentencesInTopic(topicId).some(s => s.level === state.levelFilter)) {
       state.levelFilter = 'all';
@@ -423,8 +574,8 @@
     }
     renderTopicRail();
     stopForFilterChange();
-    applyFilters();
     window.scrollTo({ top: 0, behavior: 'auto' });
+    applyFilters({ resume: !fromStart });
     return true;
   }
 
@@ -434,8 +585,8 @@
     state.levelFilter = level;
     localStorage.setItem('lp_level', level);
     stopForFilterChange();
-    applyFilters();
     window.scrollTo({ top: 0, behavior: 'auto' });
+    applyFilters();
   }
 
   // ---- Topic Rail / Head / Sheet ----
@@ -508,6 +659,7 @@
       : `${t('unitTopics')(visibleTopics.length)} · ${count}`;
     $('levelLabel').textContent = state.levelFilter === 'all' ? t('allLevels') : LEVEL_CEFR[state.levelFilter];
     $('levelDot').className = `lvl-dot ${state.levelFilter === 'all' ? '' : state.levelFilter}`;
+    syncOfflineButton();
   }
 
   function renderTopicSheet() {
@@ -639,26 +791,44 @@
     }).join(' ');
   }
 
+  // Blind listening: is this line's English text currently uncovered?
+  function isRevealed(s) {
+    return !state.blind || (s && state.revealedId === s.id);
+  }
+
   function renderMsg(li, s, index, isActive) {
     const speaker = speakerOf(s.text);
     const text = stripSpeakerLabel(s.text);
-    li.className = `msg side-${speaker === 'B' ? 'b' : 'a'}${isActive ? ' active' : ''}`;
+    const revealed = isActive && isRevealed(s);
+    const mine = isMyLine(s);
+    li.className = `msg side-${speaker === 'B' ? 'b' : 'a'}${isActive ? ' active' : ''}${revealed ? ' revealed' : ''}${mine ? ' mine' : ''}`;
     li.dataset.index = index;
     const avatar = `<span class="msg-avatar" aria-hidden="true">${speaker || '•'}</span>`;
     if (!isActive) {
       li.innerHTML = `${avatar}<div class="msg-bubble"><p class="msg-text">${escapeHtml(text)}</p></div>`;
       return;
     }
+    const blindHint = state.blind && !revealed
+      ? `<span class="blind-hint" data-action="reveal"><i class="ri-eye-line"></i>${escapeHtml(t('revealText'))}</span>`
+      : '';
     li.innerHTML = `${avatar}
       <div class="msg-bubble">
-        <p class="msg-text">${buildWordsHtml(text)}</p>
+        <div class="msg-text-wrap">
+          <p class="msg-text">${buildWordsHtml(text)}</p>
+          ${blindHint}
+        </div>
         ${state.showCn && s.cn ? `<p class="msg-cn">${escapeHtml(stripSpeakerLabel(s.cn))}</p>` : ''}
+        ${mine ? `<span class="turn-bar" aria-hidden="true"></span>` : ''}
         <div class="msg-tools">
           <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
           <span>${index + 1} / ${state.filtered.length}</span>
-          <span class="msg-level ${s.level}">${LEVEL_CEFR[s.level] || escapeHtml(s.level)}</span>
+          ${mine
+            ? `<span class="turn-tag"><i class="ri-mic-line"></i>${escapeHtml(t('roleYourLine'))}</span>`
+            : `<span class="msg-level ${s.level}">${LEVEL_CEFR[s.level] || escapeHtml(s.level)}</span>`}
           <span class="spacer"></span>
           <button class="msg-tool" data-action="replay" title="${escapeHtml(t('replay'))}" aria-label="${escapeHtml(t('replay'))}"><i class="ri-restart-line"></i></button>
+          <button class="msg-tool" data-action="practice" title="${escapeHtml(t('practiceTitle'))}" aria-label="${escapeHtml(t('practiceTitle'))}"><i class="ri-graduation-cap-line"></i></button>
+          <button class="msg-tool${state.blind ? ' on' : ''}" data-action="blind" title="${escapeHtml(t('blindLabel'))}" aria-label="${escapeHtml(t('blindLabel'))}" aria-pressed="${state.blind}"><i class="ri-eye-off-line"></i></button>
           <button class="msg-tool${state.showCn ? ' on' : ''}" data-action="cn" title="${escapeHtml(t('translation'))}" aria-label="${escapeHtml(t('translation'))}" aria-pressed="${state.showCn}"><i class="ri-translate-2"></i></button>
         </div>
       </div>`;
@@ -809,6 +979,24 @@
     $('npCnBtn').setAttribute('aria-pressed', String(state.showCn));
   }
 
+  // Blind listening in the wide panel: the line (and "up next") stay blurred until revealed.
+  function syncStageBlind() {
+    const s = state.filtered[state.currentIndex];
+    const hidden = state.blind && !!s && !isRevealed(s);
+    const wrap = $('npTextWrap');
+    wrap.classList.toggle('is-hidden', hidden);
+    if (hidden) {
+      wrap.setAttribute('role', 'button');
+      wrap.tabIndex = 0;
+    } else {
+      wrap.removeAttribute('role');
+      wrap.removeAttribute('tabindex');
+    }
+    nowPanel.classList.toggle('is-blind', state.blind);
+    $('npBlindBtn').classList.toggle('on', state.blind);
+    $('npBlindBtn').setAttribute('aria-pressed', String(state.blind));
+  }
+
   // A voice-memo style waveform. Shape is seeded by the sentence id, so a line always
   // looks the same; the coloured copy is revealed by playback progress (--p).
   function renderWave(s) {
@@ -851,13 +1039,15 @@
     const text = stripSpeakerLabel(s.text);
     panel.classList.toggle('side-b', speaker === 'B');
     $('npAvatar').textContent = speaker;
-    $('npWho').textContent = t('speaker')(speaker);
+    $('npWho').textContent = isMyLine(s) ? `${t('speaker')(speaker)} · ${t('roleYourLine')}` : t('speaker')(speaker);
+    panel.classList.toggle('is-mine', isMyLine(s));
     const level = $('npLevel');
     level.className = `msg-level ${s.level}`;
     level.textContent = LEVEL_CEFR[s.level] || s.level;
     const npText = $('npText');
     npText.innerHTML = buildWordsHtml(text);
     npText.classList.toggle('is-long', text.length > 90);
+    syncStageBlind();
     // Fresh line: replay the entrance animation.
     if (panel.dataset.lineId !== String(s.id)) {
       panel.dataset.lineId = String(s.id);
@@ -883,6 +1073,8 @@
       updateLocatePill();
       return;
     }
+    savePosition();
+    prepareOfflineAhead();
     ensureIndexRendered(state.currentIndex);
     const li = sentenceList.children[state.currentIndex];
     if (activeEl && activeEl !== li && activeEl.isConnected) {
@@ -1028,29 +1220,89 @@
     return !state.speakCn || catalogHas(audioCatalog.zh, sentence.id);
   }
 
+  // Audio file paths. Playback and offline downloads must use the exact same strings.
+  const UI_SRC = {
+    prompt: 'audio/ui/prompt.m4a',
+    gapPass: 'audio/ui/gap-pass.m4a',
+    gapLine: 'audio/ui/gap-line.m4a'
+  };
+  function accentDir(accent = state.accent) {
+    return accent === 'uk' ? 'en-gb' : 'en-us';
+  }
+  function englishSrc(sentence, accent = state.accent) {
+    return `audio/${accentDir(accent)}/${sentence.id}.m4a?v=4`;
+  }
+  function chineseSrc(sentence) {
+    return `audio/zh/${sentence.id}.m4a?v=4`;
+  }
+  // Recorded single-word clip for the word card, or null when it was never generated.
+  function wordClipSrc(word, accent = state.accent) {
+    if (!audioCatalog) return null;
+    const slug = wordClipSlug(word);
+    const list = accent === 'uk' ? audioCatalog.wordsUk : audioCatalog.words;
+    if (!catalogHas(list, slug)) return null;
+    return `audio/${accent === 'uk' ? 'words-uk' : 'words'}/${slug}.m4a`;
+  }
+  // Same tokens as tools/audio/generate.mjs uses for audio/words/.
+  function sentenceWordTokens(sentence) {
+    return stripSpeakerLabel(sentence.text).match(/[A-Za-z]+(?:['-][A-Za-z]+)*/g) || [];
+  }
+
   function buildMediaTracks(sentence, rates) {
-    const enKey = state.accent === 'uk' ? 'en-gb' : 'en-us';
-    const enSrc = `audio/${enKey}/${sentence.id}.m4a?v=4`;
-    const zhSrc = `audio/zh/${sentence.id}.m4a?v=4`;
-    const gap = 'audio/ui/gap-pass.m4a';
     const title = sentence.text;
     const tracks = [];
     const addSpeech = (src, rate) => tracks.push({ src, rate, title, critical: true });
 
     // One read per play: English; the Chinese translation follows only when "朗读中文" is on.
-    addSpeech(enSrc, rates.first);
+    addSpeech(englishSrc(sentence), rates.first);
     if (state.speakCn) {
-      tracks.push({ src: gap, rate: 1, title });
+      tracks.push({ src: UI_SRC.gapPass, rate: 1, title });
       tracks.push({
-        src: zhSrc,
+        src: chineseSrc(sentence),
         rate: rates.chinese,
         title: sentence.cn || sentence.text,
         critical: true
       });
     }
     // Short beat between lines so the dialogue flows (gap-sentence.m4a was 2.6 s).
-    tracks.push({ src: 'audio/ui/gap-line.m4a', rate: 1, title });
+    tracks.push({ src: UI_SRC.gapLine, rate: 1, title });
     return tracks;
+  }
+
+  // ---- Offline audio: prepare downloaded files a few lines ahead of the player ----
+  const PREPARE_AHEAD = 4;
+  function prepareOfflineAhead() {
+    if (!offline || state.currentIndex < 0) return;
+    const srcs = [UI_SRC.prompt, UI_SRC.gapPass, UI_SRC.gapLine];
+    for (let i = state.currentIndex; i < Math.min(state.filtered.length, state.currentIndex + PREPARE_AHEAD); i++) {
+      const s = state.filtered[i];
+      srcs.push(englishSrc(s));
+      if (state.speakCn) srcs.push(chineseSrc(s));
+    }
+    // Wrapping to the next topic: also get its first line ready.
+    if (state.currentIndex >= state.filtered.length - PREPARE_AHEAD && state.loopScope === 'all') {
+      const nextTopic = nextTopicAfter(state.topic);
+      const first = nextTopic && sentencesInTopic(nextTopic.id).find(s => state.levelFilter === 'all' || s.level === state.levelFilter);
+      if (first) srcs.push(englishSrc(first));
+    }
+    offline.prepare(srcs);
+  }
+
+  // Everything a topic needs to play without network: each line's English read in the
+  // current accent, its Chinese read, the word clips and the UI sounds. Only files listed in
+  // audio/catalog.json are included.
+  function offlineSourcesFor(topicId) {
+    const srcs = new Set([UI_SRC.prompt, UI_SRC.gapPass, UI_SRC.gapLine]);
+    if (!audioCatalog) return [];
+    sentencesInTopic(topicId).forEach(s => {
+      if (catalogHas(audioCatalog[accentDir()], s.id)) srcs.add(englishSrc(s));
+      if (catalogHas(audioCatalog.zh, s.id)) srcs.add(chineseSrc(s));
+      sentenceWordTokens(s).forEach(token => {
+        const clip = wordClipSrc(token);
+        if (clip) srcs.add(clip);
+      });
+    });
+    return [...srcs];
   }
 
   // The topic after topicId in sidebar order (wrapping round) that has lines at the
@@ -1069,7 +1321,20 @@
   // Repeats the line until the chosen count is reached, then moves to the next line.
   // After the last line it goes on to the next topic, or starts this topic over (state.loopScope).
   function handleSentenceEnd(viaSpeech) {
+    endTurnUi();
     state.playsDone++;
+    recordLineHeard(state.filtered[state.currentIndex]);
+    // Sleep timer: stop between lines once the time is up (or at the end of the topic).
+    if (sleepTimer.mode && sleepTimer.deadline && Date.now() >= sleepTimer.deadline) {
+      finishSleepTimer();
+      return;
+    }
+    const atTopicEnd = state.currentIndex >= state.filtered.length - 1
+      && state.repeat !== 0 && state.playsDone >= state.repeat;
+    if (atTopicEnd && sleepTimer.mode === 'topic') {
+      finishSleepTimer();
+      return;
+    }
     const run = fn => {
       if (viaSpeech) state.loopTimer = setTimeout(fn, 600);
       else fn();
@@ -1088,8 +1353,10 @@
     }
     const nextTopic = state.loopScope === 'all' ? nextTopicAfter(state.topic) : null;
     if (nextTopic) {
+      // This topic is done, so coming back to it later starts from the top.
+      forgetPosition(state.topic);
       // Same path as tapping the topic, so the list, header and saved topic all follow.
-      setTopic(nextTopic.id);
+      setTopic(nextTopic.id, { fromStart: true });
       scrollActiveChipIntoView(true);
       if (openSheetEl && openSheetEl.id === 'topicSheet') renderTopicSheet();
     } else {
@@ -1133,9 +1400,71 @@
     if (state.currentIndex < 0 || state.filtered.length === 0) return;
     const s = state.filtered[state.currentIndex];
 
-    state.stats.sentencesPlayed++;
-    saveStats();
+    // A downloaded line whose blob: URL is not ready yet (first tap right after launch):
+    // load it, then play, so it does not go to the network.
+    if (offline && canPlaySentenceFromFile(s) && offline.has(englishSrc(s)) && !offline.resolve(englishSrc(s))) {
+      const token = ++prepareToken;
+      const srcs = [englishSrc(s), UI_SRC.prompt, UI_SRC.gapPass, UI_SRC.gapLine];
+      if (state.speakCn) srcs.push(chineseSrc(s));
+      updatePlayBtn(true);
+      offline.prepare(srcs).then(() => {
+        if (token !== prepareToken || state.filtered[state.currentIndex] !== s) return;
+        if (!offline.resolve(englishSrc(s))) return startPlayback(s, playReason);
+        playCurrent(playReason);
+      });
+      return;
+    }
+    startPlayback(s, playReason);
+  }
 
+  let prepareToken = 0;
+
+  // ---- Role play: the learner's lines become a pause to say them ----
+  function isMyLine(s) {
+    return !!state.role && !!s && speakerOf(s.text) === state.role;
+  }
+
+  // Time to say a line: about half a second per word plus a moment to start,
+  // stretched when the learner listens slowly.
+  function turnSeconds(s) {
+    const words = sentenceWordTokens(s).length;
+    const sec = (1.5 + words * 0.45) / Math.min(1, Math.max(0.5, state.speed));
+    return Math.min(14, Math.max(2.5, sec));
+  }
+
+  function endTurnUi() {
+    document.body.classList.remove('your-turn');
+  }
+
+  // Silence fills the turn. It is played as audio (gap files) so the session keeps running
+  // in the background and on the lock screen; without the files a timer is used.
+  function startMyTurn(s, playReason) {
+    const sec = turnSeconds(s);
+    document.body.classList.add('your-turn');
+    document.documentElement.style.setProperty('--turn', `${sec}s`);
+    if (activeEl) {
+      // Restart the countdown bar for this turn.
+      activeEl.classList.remove('turn-run');
+      void activeEl.offsetWidth;
+      activeEl.classList.add('turn-run');
+    }
+    audio.onProgress = setProgress;
+    if (audioCatalog) {
+      const tracks = [];
+      if (playReason === 'initial') tracks.push({ src: UI_SRC.prompt, rate: 1, title: s.text });
+      const gapSec = 2.2; // length of audio/ui/gap-pass.m4a
+      for (let i = 0; i < Math.ceil(sec / gapSec); i++) tracks.push({ src: UI_SRC.gapPass, rate: 1, title: s.text, critical: i === 0 });
+      audio.playQueue(tracks, {
+        onEnd: () => handleSentenceEnd(false),
+        onFallback: () => { state.loopTimer = setTimeout(() => handleSentenceEnd(true), sec * 1000); }
+      });
+    } else {
+      state.loopTimer = setTimeout(() => handleSentenceEnd(true), sec * 1000);
+    }
+    updatePlayBtn(true);
+  }
+
+  function startPlayback(s, playReason) {
     const selectedSpeed = getSelectedSpeed();
     if (selectedSpeed !== state.speed) {
       state.speed = selectedSpeed;
@@ -1145,6 +1474,10 @@
     const rates = getPlaybackRates(state.speed);
     // Repeats keep their count; any fresh start (tap, prev/next, play) begins at zero.
     if (playReason !== 'repeat' && playReason !== 'loop') state.playsDone = 0;
+    if (isMyLine(s)) {
+      startMyTurn(s, playReason);
+      return;
+    }
     const passes = [
       { text: s.text, lang: getEnglishLang(), rate: rates.first, pitch: 1.1, clearSpeech: true, voiceVariant: state.accent }
     ];
@@ -1157,7 +1490,7 @@
     if (canPlaySentenceFromFile(s)) {
       const tracks = buildMediaTracks(s, rates);
       if (playReason === 'initial') {
-        tracks.unshift({ src: 'audio/ui/prompt.m4a', rate: 1, title: s.text });
+        tracks.unshift({ src: UI_SRC.prompt, rate: 1, title: s.text });
       }
       audio.onProgress = setProgress;
       audio.playQueue(tracks, {
@@ -1212,6 +1545,8 @@
 
   function clearLoopTimer() {
     if (state.loopTimer) { clearTimeout(state.loopTimer); state.loopTimer = null; }
+    prepareToken++; // a stop also cancels a line that is still waiting for its offline file
+    endTurnUi();
   }
 
   function interruptMainPlayback() {
@@ -1459,7 +1794,10 @@
     if (!el) return;
     closePopover();
     closeWordPopup();
-    if (openSheetEl && openSheetEl !== el) openSheetEl.classList.remove('show');
+    if (openSheetEl && openSheetEl !== el) {
+      if (openSheetEl.id === 'practiceSheet') closePracticeAudio();
+      openSheetEl.classList.remove('show');
+    }
     el.classList.add('show');
     scrim.classList.add('show');
     document.body.classList.add('sheet-open');
@@ -1469,6 +1807,8 @@
 
   function closeSheet() {
     if (!openSheetEl) return;
+    // Leaving practice: stop its audio and give the microphone back.
+    if (openSheetEl.id === 'practiceSheet') closePracticeAudio();
     openSheetEl.classList.remove('show');
     openSheetEl = null;
     scrim.classList.remove('show');
@@ -1515,17 +1855,57 @@
   }
 
   // ---- Stats ----
+  const STREAK_MIN_SEC = 60; // a day counts toward the streak after one minute of listening
+  let heardSet = new Set(state.stats.heard.map(String));
+
   function saveStats() {
+    state.stats.heard = [...heardSet];
     localStorage.setItem('lp_stats', JSON.stringify(state.stats));
+  }
+
+  function dayKey(date = new Date()) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  function recordLineHeard(s) {
+    if (!s) return;
+    state.stats.sentencesPlayed++;
+    heardSet.add(String(s.id));
+    saveStats();
+  }
+
+  // Days in a row with at least a minute of listening, ending today
+  // (or yesterday, so the streak does not read 0 before today's practice).
+  function streakDays() {
+    const days = state.stats.days;
+    const cursor = new Date();
+    if ((days[dayKey(cursor)] || 0) < STREAK_MIN_SEC) cursor.setDate(cursor.getDate() - 1);
+    let streak = 0;
+    while ((days[dayKey(cursor)] || 0) >= STREAK_MIN_SEC) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+  }
+
+  function formatDuration(sec) {
+    const minutes = Math.floor(sec / 60);
+    if (minutes < 60) return t('durationMin')(minutes);
+    return t('durationHourMin')(Math.floor(minutes / 60), minutes % 60);
   }
 
   function renderStats() {
     const s = state.stats;
+    const todayMin = Math.floor((s.days[dayKey()] || 0) / 60);
+    const heard = SENTENCES.filter(x => heardSet.has(String(x.id))).length;
     $('statTiles').innerHTML = `
-      <div class="stat-tile"><div class="stat-value">${s.sentencesPlayed || 0}</div><div class="stat-label">${t('statsPlayed')}</div></div>
+      <div class="stat-tile"><div class="stat-value">${todayMin}<small>${escapeHtml(t('unitMin'))}</small></div><div class="stat-label">${t('statsToday')}</div></div>
+      <div class="stat-tile"><div class="stat-value">${streakDays()}<small>${escapeHtml(t('unitDay'))}</small></div><div class="stat-label">${t('statsStreak')}</div></div>
+      <div class="stat-tile"><div class="stat-value">${heard}<small>/ ${SENTENCES.length}</small></div><div class="stat-label">${t('statsHeard')}</div></div>
       <button class="stat-tile" type="button" data-open="wordbook"><div class="stat-value">${state.wordbook.length}</div><div class="stat-label">${t('statsWords')}<i class="ri-arrow-right-s-line"></i></div></button>
-      <div class="stat-tile"><div class="stat-value">${SENTENCES.length}</div><div class="stat-label">${t('statsTotal')}</div></div>
     `;
+    $('statTotals').textContent = t('statsTotals')(formatDuration(s.listenedSec), s.sentencesPlayed);
   }
 
   // ---- Wordbook ----
@@ -1586,13 +1966,13 @@
         audio.stop(true);
         clearLoopTimer();
         btn.classList.add('speaking');
-        audio.speakWord(w, () => {
+        speakWordClip(w, accent, () => {
           btn.classList.remove('speaking');
           if (wasPlaying && resumeIndex === state.currentIndex) {
             playCurrent('loop');
             updatePlayBtn(true);
           }
-        }, { voiceVariant: accent });
+        });
       });
     });
 
@@ -1613,15 +1993,28 @@
     openSheet('wordbookSheet');
   }
 
-  // ---- Track Session Time ----
-  function startSessionTimer() {
-    state.stats.startTime = Date.now();
+  // ---- Track listening time (only while audio is playing) ----
+  function startListeningTimer() {
+    let last = Date.now();
+    let unsaved = 0;
+    const flush = () => {
+      if (unsaved) saveStats();
+      unsaved = 0;
+    };
     setInterval(() => {
-      if (state.stats.startTime) {
-        state.stats.totalTime += 1;
-        saveStats();
-      }
-    }, 60000); // Every minute
+      const now = Date.now();
+      // Background tabs may tick late; cap one tick so a suspended page does not count.
+      const sec = Math.min(now - last, 65000) / 1000;
+      last = now;
+      if (!audio.isPlaying || audio.isPaused) return;
+      const key = dayKey();
+      state.stats.days[key] = (state.stats.days[key] || 0) + sec;
+      state.stats.listenedSec += sec;
+      unsaved += sec;
+      if (unsaved >= 15) flush();
+    }, 1000);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+    window.addEventListener('pagehide', flush);
   }
 
   // ---- Language ----
@@ -1652,7 +2045,10 @@
     renderLevelPopover();
     renderStats();
     syncModeUi();
+    renderSleepControl();
     updateWordbookBadge();
+    if (openSheetEl && openSheetEl.id === 'menuSheet') syncOfflineStatus();
+    if (openSheetEl && openSheetEl.id === 'practiceSheet') renderPractice();
     if (openSheetEl && openSheetEl.id === 'topicSheet') renderTopicSheet();
     if (openSheetEl && openSheetEl.id === 'wordbookSheet') renderWordbook();
 
@@ -1679,7 +2075,6 @@
         state.lang = next;
         localStorage.setItem('lp_lang', state.lang);
         updateI18n();
-        populateVoiceSelect(); // refresh "Auto" option label
       });
     });
   }
@@ -1730,10 +2125,13 @@
       syncSpeakCn();
       // Takes effect from the next line; the one playing keeps its queue.
       showToast(state.speakCn ? t('speakCnOn') : t('speakCnOff'), state.speakCn ? 'ri-volume-up-line' : 'ri-volume-mute-line');
+      prepareOfflineAhead();
     });
 
     $('btnMenu').addEventListener('click', () => {
       renderStats();
+      syncSleepStatus();
+      syncOfflineStatus();
       openSheet('menuSheet');
     });
     $('statTiles').addEventListener('click', e => {
@@ -1745,6 +2143,10 @@
         state.accent = btn.dataset.accent === 'uk' ? 'uk' : 'us';
         localStorage.setItem('lp_accent', state.accent);
         syncAccentActive();
+        // Downloads are per accent, so the topic's offline state can change.
+        syncOfflineButton();
+        syncOfflineStatus();
+        prepareOfflineAhead();
         // Refresh word popup pronunciations if open
         const popupWord = $('popupWord').textContent;
         if (wordPopup.classList.contains('show') && popupWord) {
@@ -1861,6 +2263,14 @@
       if (tool && isActive) {
         if (tool.dataset.action === 'replay') selectSentence(index);
         else if (tool.dataset.action === 'cn') toggleActiveTranslation();
+        else if (tool.dataset.action === 'blind') setBlind(!state.blind);
+        else if (tool.dataset.action === 'practice') openPractice();
+        return;
+      }
+
+      // Blind listening: the first tap on the hidden line uncovers it.
+      if (isActive && !li.classList.contains('revealed') && state.blind && e.target.closest('.msg-text-wrap')) {
+        revealCurrentLine();
         return;
       }
 
@@ -1880,6 +2290,10 @@
   function setupStage() {
     const panel = $('nowPanel');
     panel.addEventListener('click', e => {
+      if (e.target.closest('#npTextWrap.is-hidden')) {
+        revealCurrentLine();
+        return;
+      }
       const wordEl = e.target.closest('.word');
       if (wordEl) {
         showWordPopup(wordEl.dataset.word, wordEl);
@@ -1889,6 +2303,8 @@
       if (tool && state.currentIndex >= 0) {
         if (tool.dataset.np === 'replay') selectSentence(state.currentIndex);
         else if (tool.dataset.np === 'cn') toggleActiveTranslation();
+        else if (tool.dataset.np === 'blind') setBlind(!state.blind);
+        else if (tool.dataset.np === 'practice') openPractice();
         return;
       }
       if (e.target.closest('#npCnWrap.is-hidden')) {
@@ -1897,6 +2313,13 @@
       }
       // Clicking the button (not playNext directly) keeps auth-guard's check in the loop.
       if (e.target.closest('#npNext') && !$('npNext').disabled) $('btnNext').click();
+    });
+    $('npTextWrap').addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && $('npTextWrap').classList.contains('is-hidden')) {
+        e.preventDefault();
+        e.stopPropagation(); // Space must not also toggle playback
+        revealCurrentLine();
+      }
     });
     $('npCnWrap').addEventListener('keydown', e => {
       if ((e.key === 'Enter' || e.key === ' ') && $('npCnWrap').classList.contains('is-hidden')) {
@@ -1966,6 +2389,578 @@
     });
   }
 
+  // ---- Blind listening ----
+  function setBlind(on) {
+    state.blind = !!on;
+    state.revealedId = null;
+    localStorage.setItem('lp_blind', String(state.blind));
+    document.body.classList.toggle('blind', state.blind);
+    $('blindSwitch').setAttribute('aria-checked', String(state.blind));
+    if (state.blind) closeWordPopup();
+    if (activeEl && activeEl.isConnected && state.filtered[state.currentIndex]) {
+      renderMsg(activeEl, state.filtered[state.currentIndex], state.currentIndex, true);
+    }
+    syncStageBlind();
+    showToast(state.blind ? t('blindOn') : t('blindOff'), state.blind ? 'ri-eye-off-line' : 'ri-eye-line');
+  }
+
+  function revealCurrentLine() {
+    const s = state.filtered[state.currentIndex];
+    if (!s) return;
+    state.revealedId = s.id;
+    if (activeEl && activeEl.isConnected) {
+      // Patch in place so the bubble does not replay its entrance animation.
+      activeEl.classList.add('revealed');
+      const hint = activeEl.querySelector('.blind-hint');
+      if (hint) hint.remove();
+    }
+    syncStageBlind();
+  }
+
+  function setupBlindMode() {
+    document.body.classList.toggle('blind', state.blind);
+    $('blindSwitch').setAttribute('aria-checked', String(state.blind));
+    $('blindSwitch').addEventListener('click', () => setBlind(!state.blind));
+  }
+
+  // ---- Sleep timer ----
+  // mode: null (off), a number of minutes, or 'topic' (stop when the current topic ends).
+  const SLEEP_OPTIONS = [null, 15, 30, 45, 60, 'topic'];
+  const sleepTimer = { mode: null, deadline: 0, timeout: null, ticker: null };
+
+  function sleepOptionLabel(mode) {
+    if (mode === null) return t('sleepOff');
+    if (mode === 'topic') return t('sleepTopic');
+    return t('sleepMinutes')(mode);
+  }
+
+  function renderSleepControl() {
+    $('sleepControl').innerHTML = SLEEP_OPTIONS.map(mode => {
+      const active = sleepTimer.mode === mode;
+      return `<button class="chip-opt${active ? ' active' : ''}" type="button" role="radio" aria-checked="${active}" data-sleep="${mode === null ? 'off' : mode}">${escapeHtml(sleepOptionLabel(mode))}</button>`;
+    }).join('');
+    syncSleepStatus();
+  }
+
+  function syncSleepStatus() {
+    let text = '';
+    if (sleepTimer.mode === 'topic') text = t('sleepTopicLeft');
+    else if (sleepTimer.mode) text = t('sleepLeft')(Math.max(1, Math.ceil((sleepTimer.deadline - Date.now()) / 60000)));
+    $('sleepStatus').textContent = text;
+  }
+
+  function clearSleepTimer() {
+    clearTimeout(sleepTimer.timeout);
+    clearInterval(sleepTimer.ticker);
+    sleepTimer.mode = null;
+    sleepTimer.deadline = 0;
+    sleepTimer.timeout = null;
+    sleepTimer.ticker = null;
+  }
+
+  function setSleepTimer(mode) {
+    clearSleepTimer();
+    sleepTimer.mode = mode;
+    if (typeof mode === 'number') {
+      sleepTimer.deadline = Date.now() + mode * 60000;
+      // Stops mid-line when the time is up; handleSentenceEnd also checks between lines in
+      // case a background tab delays this timer.
+      sleepTimer.timeout = setTimeout(finishSleepTimer, mode * 60000);
+      sleepTimer.ticker = setInterval(syncSleepStatus, 30000);
+    }
+    renderSleepControl();
+    showToast(mode === null ? t('sleepCancelled') : `${t('sleepLabel')} · ${sleepOptionLabel(mode)}`, 'ri-moon-clear-line');
+  }
+
+  function finishSleepTimer() {
+    const wasPlaying = audio.isPlaying;
+    clearSleepTimer();
+    if (audio.hasMediaQueue()) audio.pause();
+    else audio.stop();
+    clearLoopTimer();
+    updatePlayBtn(false);
+    renderSleepControl();
+    if (wasPlaying || state.currentIndex >= 0) showToast(t('sleepDone'), 'ri-moon-clear-line', 3000);
+  }
+
+  function setupSleepTimer() {
+    renderSleepControl();
+    $('sleepControl').addEventListener('click', e => {
+      const opt = e.target.closest('[data-sleep]');
+      if (!opt) return;
+      const raw = opt.dataset.sleep;
+      const mode = raw === 'off' ? null : (raw === 'topic' ? 'topic' : parseInt(raw, 10));
+      if (mode === sleepTimer.mode && mode !== null) return;
+      setSleepTimer(mode);
+    });
+  }
+
+  // ---- Offline audio (download a topic) ----
+  let offlineJob = null; // { topic, controller }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  // 'none' | 'partial' | 'done' for the current topic in the current accent.
+  function offlineStateFor(topicId) {
+    if (!offline) return 'none';
+    const srcs = offlineSourcesFor(topicId);
+    if (!srcs.length) return 'none';
+    const have = srcs.filter(src => offline.has(src)).length;
+    if (have === srcs.length) return 'done';
+    return have > 3 ? 'partial' : 'none'; // the 3 UI sounds alone do not count
+  }
+
+  function syncOfflineButton() {
+    const btn = $('btnOffline');
+    if (!offline) {
+      btn.hidden = true;
+      return;
+    }
+    const downloading = offlineJob && offlineJob.topic === state.topic;
+    const status = downloading ? 'loading' : offlineStateFor(state.topic);
+    btn.dataset.state = status;
+    $('offlineIcon').className = status === 'done' ? 'ri-checkbox-circle-line'
+      : (status === 'loading' ? 'ri-loader-4-line' : 'ri-download-cloud-2-line');
+    const title = status === 'done' ? t('offlineReady')
+      : (status === 'loading' ? t('offlineLoading') : (status === 'partial' ? t('offlineResume') : t('offlineDownload')));
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+    if (!downloading) {
+      $('offlinePct').textContent = '';
+      btn.style.removeProperty('--dl');
+    }
+  }
+
+  async function syncOfflineStatus() {
+    if (!offline) {
+      $('offlineStatus').textContent = t('offlineUnsupported');
+      $('btnOfflineClear').hidden = true;
+      return;
+    }
+    await offline.init();
+    const count = offline.count();
+    $('btnOfflineClear').hidden = count === 0;
+    if (!count) {
+      $('offlineStatus').textContent = t('offlineEmpty');
+      return;
+    }
+    const bytes = await offline.size();
+    const topics = visibleTopics.filter(tp => offlineStateFor(tp.id) === 'done').map(topicName);
+    $('offlineStatus').textContent = t('offlineSummary')(formatBytes(bytes), topics);
+  }
+
+  async function downloadTopic(topicId) {
+    if (!offline || offlineJob) return;
+    if (!audioCatalog) {
+      showToast(t('offlineNoCatalog'), 'ri-wifi-off-line', 2600);
+      return;
+    }
+    const srcs = offlineSourcesFor(topicId);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    offlineJob = { topic: topicId, controller };
+    syncOfflineButton();
+    const btn = $('btnOffline');
+    try {
+      const { total, failed } = await offline.download(srcs, (done, all) => {
+        if (state.topic !== topicId) return;
+        const pct = Math.round((done / all) * 100);
+        $('offlinePct').textContent = `${pct}%`;
+        btn.style.setProperty('--dl', `${pct}%`);
+      }, controller && controller.signal);
+      offlineJob = null;
+      if (failed) showToast(t('offlineFailed')(failed), 'ri-error-warning-line', 2800);
+      else showToast(total ? t('offlineDone')(topicName(topicById(topicId))) : t('offlineReady'), 'ri-checkbox-circle-line', 2400);
+    } catch (_) {
+      offlineJob = null;
+      showToast(t('offlineFailed')(srcs.length), 'ri-error-warning-line', 2800);
+    }
+    syncOfflineButton();
+    prepareOfflineAhead();
+    if (openSheetEl && openSheetEl.id === 'menuSheet') syncOfflineStatus();
+  }
+
+  async function removeTopicDownload(topicId) {
+    if (!offline) return;
+    // Keep files another downloaded topic still needs (the UI sounds and shared words).
+    // Removing "all topics" removes everything it covers.
+    const keep = new Set();
+    if (topicId !== 'all') {
+      visibleTopics.forEach(tp => {
+        if (tp.id !== topicId && offlineStateFor(tp.id) === 'done') offlineSourcesFor(tp.id).forEach(src => keep.add(src));
+      });
+    }
+    await offline.remove(offlineSourcesFor(topicId).filter(src => !keep.has(src)));
+    syncOfflineButton();
+    showToast(t('offlineRemoved'), 'ri-delete-bin-6-line');
+  }
+
+  function setupOffline() {
+    if (!offline) {
+      syncOfflineButton();
+      return;
+    }
+    offline.init().then(() => {
+      syncOfflineButton();
+      prepareOfflineAhead();
+    });
+    $('btnOffline').addEventListener('click', () => {
+      const status = $('btnOffline').dataset.state;
+      if (status === 'loading') return;
+      if (status === 'done') {
+        const name = state.topic === 'all' ? t('allTopics') : topicName(topicById(state.topic));
+        if (window.confirm(t('offlineConfirmRemove')(name))) removeTopicDownload(state.topic);
+        return;
+      }
+      downloadTopic(state.topic);
+    });
+    $('btnOfflineClear').addEventListener('click', async () => {
+      if (!window.confirm(t('offlineConfirmClear'))) return;
+      await offline.clear();
+      syncOfflineButton();
+      syncOfflineStatus();
+      showToast(t('offlineRemoved'), 'ri-delete-bin-6-line');
+    });
+  }
+
+  // ---- Role play setting ----
+  function syncRoleControl() {
+    document.querySelectorAll('#roleControl .seg-btn').forEach(btn => {
+      btn.classList.toggle('active', (btn.dataset.role === 'off' ? null : btn.dataset.role) === state.role);
+    });
+  }
+
+  function setRole(role) {
+    state.role = role === 'A' || role === 'B' ? role : null;
+    if (state.role) localStorage.setItem('lp_role', state.role);
+    else localStorage.removeItem('lp_role');
+    syncRoleControl();
+    // Re-mark whose lines are whose; the line playing now keeps going as it started.
+    renderList(true, false);
+    updateDisplay('none');
+    showToast(state.role ? t('roleOn')(state.role) : t('roleOffToast'), 'ri-speak-line');
+  }
+
+  function setupRolePlay() {
+    syncRoleControl();
+    $('roleControl').addEventListener('click', e => {
+      const btn = e.target.closest('[data-role]');
+      if (!btn) return;
+      const role = btn.dataset.role === 'off' ? null : btn.dataset.role;
+      if (role === state.role) return;
+      setRole(role);
+    });
+  }
+
+  // ---- Practice sheet: shadowing and dictation on one line ----
+  const practice = {
+    s: null,          // the line being practised
+    recorder: null,
+    stream: null,
+    chunks: [],
+    mineUrl: null,
+    stopTimer: null,
+    token: 0          // bumps to cancel a running listen -> record sequence
+  };
+
+  function practiceCanRecord() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof MediaRecorder !== 'undefined');
+  }
+
+  // The current line's English read, from its recorded file when there is one.
+  function playLineOnce(s, rate, onEnd) {
+    const hasFile = audioCatalog && catalogHas(audioCatalog[accentDir()], s.id);
+    const viaSpeech = () => audio.speak(
+      buildClearEnglishSpeechText(normalizeJoinedLetterSpeech(stripSpeakerLabel(s.text))),
+      onEnd,
+      { lang: getEnglishLang(), rate: Math.max(0.5, rate * 0.95), pitch: 1.05, voiceVariant: state.accent }
+    );
+    if (!hasFile) {
+      viaSpeech();
+      return;
+    }
+    audio.playClip(englishSrc(s), ok => (ok ? onEnd() : viaSpeech()), { rate });
+  }
+
+  function stopPracticeAudio() {
+    practice.token++;
+    audio.stop(true);
+  }
+
+  function releaseMic() {
+    clearTimeout(practice.stopTimer);
+    practice.stopTimer = null;
+    if (practice.recorder && practice.recorder.state !== 'inactive') {
+      try { practice.recorder.stop(); } catch (_) {}
+    }
+    if (practice.stream) practice.stream.getTracks().forEach(track => track.stop());
+    practice.stream = null;
+  }
+
+  function setRecordState(status, message) {
+    $('btnRecord').dataset.state = status;
+    $('recIcon').className = status === 'recording' ? 'ri-stop-fill'
+      : (status === 'listening' ? 'ri-headphone-line' : 'ri-mic-fill');
+    $('recStatus').textContent = message;
+    const hasTake = !!practice.mineUrl;
+    $('btnPlayMine').disabled = !hasTake || status !== 'idle';
+    $('btnCompare').disabled = !hasTake || status !== 'idle';
+  }
+
+  function clearTake() {
+    if (practice.mineUrl) URL.revokeObjectURL(practice.mineUrl);
+    practice.mineUrl = null;
+  }
+
+  // Tap the mic: hear the line once, then record the learner saying it.
+  // Recording stops on a second tap or after a generous maximum.
+  function startShadowing() {
+    const s = practice.s;
+    if (!s) return;
+    if (!practiceCanRecord()) {
+      setRecordState('idle', t('recUnsupported'));
+      return;
+    }
+    stopPracticeAudio();
+    const token = practice.token;
+    setRecordState('listening', t('recListenFirst'));
+    playLineOnce(s, 1, () => {
+      if (token !== practice.token) return;
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        if (token !== practice.token) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        practice.stream = stream;
+        practice.chunks = [];
+        const recorder = new MediaRecorder(stream);
+        practice.recorder = recorder;
+        recorder.ondataavailable = e => { if (e.data && e.data.size) practice.chunks.push(e.data); };
+        recorder.onstop = () => {
+          if (practice.stream) practice.stream.getTracks().forEach(track => track.stop());
+          practice.stream = null;
+          if (token !== practice.token || !practice.chunks.length) return;
+          clearTake();
+          practice.mineUrl = URL.createObjectURL(new Blob(practice.chunks, { type: recorder.mimeType || 'audio/mp4' }));
+          setRecordState('idle', t('recDone'));
+        };
+        recorder.start();
+        setRecordState('recording', t('recRecording'));
+        const maxSec = Math.min(20, turnSeconds(s) * 1.6 + 2);
+        practice.stopTimer = setTimeout(() => {
+          if (recorder.state === 'recording') recorder.stop();
+        }, maxSec * 1000);
+      }).catch(() => {
+        if (token !== practice.token) return;
+        setRecordState('idle', t('recDenied'));
+      });
+    });
+  }
+
+  function stopShadowing() {
+    clearTimeout(practice.stopTimer);
+    if (practice.recorder && practice.recorder.state === 'recording') practice.recorder.stop();
+  }
+
+  function playMine(onEnd) {
+    if (!practice.mineUrl) return;
+    audio.playClip(practice.mineUrl, () => { if (onEnd) onEnd(); });
+  }
+
+  // ---- Dictation ----
+  // Words compared case-insensitively, ignoring punctuation; curly apostrophes count as straight.
+  function dictationWords(text) {
+    return stripSpeakerLabel(text || '')
+      .replace(/[’‘]/g, "'")
+      .toLowerCase()
+      .match(/[a-z0-9]+(?:['-][a-z0-9]+)*/g) || [];
+  }
+
+  // Longest common subsequence between the answer and what was typed:
+  // answer words on that path are correct, the rest are missed; leftover typed words are extra.
+  function compareDictation(answerText, typedText) {
+    const answer = dictationWords(answerText);
+    const typed = dictationWords(typedText);
+    const n = answer.length;
+    const m = typed.length;
+    const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[i][j] = answer[i] === typed[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const hit = new Array(n).fill(false);
+    const used = new Array(m).fill(false);
+    for (let i = 0, j = 0; i < n && j < m;) {
+      if (answer[i] === typed[j]) { hit[i] = true; used[j] = true; i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+      else j++;
+    }
+    const correct = hit.filter(Boolean).length;
+    return {
+      hit,
+      extra: typed.filter((_, j) => !used[j]),
+      score: n ? Math.round((correct / n) * 100) : 0,
+      correct,
+      total: n
+    };
+  }
+
+  // The answer with each word marked. Hits are matched in order against the display tokens.
+  function renderDictationResult(s, typedText) {
+    const result = compareDictation(s.text, typedText);
+    const tokens = stripSpeakerLabel(s.text).split(/\s+/).filter(Boolean);
+    let k = 0;
+    const answerHtml = tokens.map(token => {
+      const words = dictationWords(token);
+      if (!words.length) return escapeHtml(token);
+      // A token like "five-hundred" is one word; "Q&A" may split into several.
+      // Read every flag (no short-circuit) so k stays aligned with the answer words.
+      const ok = words.map(() => result.hit[k++]).every(Boolean);
+      return `<span class="${ok ? 'dw-hit' : 'dw-miss'}">${escapeHtml(token)}</span>`;
+    }).join(' ');
+    const level = result.score === 100 ? 'perfect' : (result.score >= 70 ? 'good' : 'low');
+    const extra = result.extra.length
+      ? `<p class="dict-extra">${escapeHtml(t('dictExtra'))} ${result.extra.map(w => `<s>${escapeHtml(w)}</s>`).join(' ')}</p>`
+      : '';
+    const box = $('dictResult');
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="dict-score ${level}"><b>${result.score}%</b><span>${escapeHtml(t('dictScore')(result.correct, result.total))}</span></div>
+      <p class="dict-answer">${answerHtml}</p>
+      ${extra}
+      ${s.cn ? `<p class="dict-cn">${escapeHtml(stripSpeakerLabel(s.cn))}</p>` : ''}`;
+  }
+
+  function resetDictation() {
+    $('dictInput').value = '';
+    $('dictResult').hidden = true;
+    $('dictResult').innerHTML = '';
+  }
+
+  // ---- Practice sheet ----
+  function renderPractice() {
+    const s = practice.s;
+    if (!s) return;
+    $('practiceSub').textContent = `${t('speaker')(speakerOf(s.text) || 'A')} · ${state.currentIndex + 1} / ${state.filtered.length}`;
+    document.querySelectorAll('#practiceTabs .seg-btn').forEach(btn => {
+      const active = btn.dataset.practice === state.practiceTab;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', String(active));
+    });
+    $('shadowPane').hidden = state.practiceTab !== 'shadow';
+    $('dictationPane').hidden = state.practiceTab !== 'dictation';
+    $('shadowText').textContent = stripSpeakerLabel(s.text);
+    $('shadowCn').textContent = stripSpeakerLabel(s.cn || '');
+    $('dictInput').placeholder = t('dictPlaceholder');
+    if (!$('btnRecord').dataset.state || $('btnRecord').dataset.state === 'idle') {
+      setRecordState('idle', practice.mineUrl ? t('recDone') : (practiceCanRecord() ? t('recHint') : t('recUnsupported')));
+    }
+  }
+
+  function practiseLine(s) {
+    if (practice.s !== s) {
+      clearTake();
+      resetDictation();
+    }
+    practice.s = s;
+    renderPractice();
+  }
+
+  function openPractice() {
+    const s = state.filtered[state.currentIndex];
+    if (!s) return;
+    interruptMainPlayback();
+    practiseLine(s);
+    openSheet('practiceSheet');
+    if (state.practiceTab === 'dictation') {
+      // Start with the audio: dictation begins by listening.
+      setTimeout(() => playLineOnce(s, 1, () => {}), 250);
+    }
+  }
+
+  function closePracticeAudio() {
+    stopPracticeAudio();
+    releaseMic();
+    setRecordState('idle', practice.mineUrl ? t('recDone') : t('recHint'));
+  }
+
+  function setupPractice() {
+    $('practiceTabs').addEventListener('click', e => {
+      const btn = e.target.closest('[data-practice]');
+      if (!btn || btn.dataset.practice === state.practiceTab) return;
+      closePracticeAudio();
+      state.practiceTab = btn.dataset.practice === 'dictation' ? 'dictation' : 'shadow';
+      localStorage.setItem('lp_practiceTab', state.practiceTab);
+      renderPractice();
+    });
+
+    $('btnRecord').addEventListener('click', () => {
+      const status = $('btnRecord').dataset.state;
+      if (status === 'recording') stopShadowing();
+      else if (status === 'listening') closePracticeAudio();
+      else startShadowing();
+    });
+    $('btnPlayOriginal').addEventListener('click', () => {
+      if (!practice.s || $('btnRecord').dataset.state !== 'idle') return;
+      stopPracticeAudio();
+      playLineOnce(practice.s, 1, () => {});
+    });
+    $('btnPlayMine').addEventListener('click', () => {
+      stopPracticeAudio();
+      playMine();
+    });
+    $('btnCompare').addEventListener('click', () => {
+      if (!practice.s) return;
+      stopPracticeAudio();
+      const token = practice.token;
+      playLineOnce(practice.s, 1, () => {
+        if (token === practice.token) setTimeout(() => { if (token === practice.token) playMine(); }, 300);
+      });
+    });
+
+    $('btnDictPlay').addEventListener('click', () => {
+      if (!practice.s) return;
+      stopPracticeAudio();
+      playLineOnce(practice.s, 1, () => {});
+    });
+    $('btnDictSlow').addEventListener('click', () => {
+      if (!practice.s) return;
+      stopPracticeAudio();
+      playLineOnce(practice.s, 0.7, () => {});
+    });
+    const check = () => {
+      if (!practice.s) return;
+      if (!$('dictInput').value.trim()) {
+        $('dictInput').focus();
+        return;
+      }
+      renderDictationResult(practice.s, $('dictInput').value);
+    };
+    $('btnDictCheck').addEventListener('click', check);
+    $('dictInput').addEventListener('keydown', e => {
+      // One line per answer: Enter checks it (Shift+Enter still adds a line break).
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        check();
+      }
+    });
+    $('btnDictNext').addEventListener('click', () => {
+      if (state.currentIndex >= state.filtered.length - 1) {
+        showToast(t('lastLine'), 'ri-information-line');
+        return;
+      }
+      stopPracticeAudio();
+      state.currentIndex++;
+      updateDisplay('nav');
+      practiseLine(state.filtered[state.currentIndex]);
+      $('dictInput').focus();
+      playLineOnce(practice.s, 1, () => {});
+    });
+  }
+
   // ---- Initialize ----
   function init() {
     setupTheme();
@@ -1982,7 +2977,12 @@
     setupStage();
     setupScrollTracking();
     setupKeyboard();
-    startSessionTimer();
+    setupBlindMode();
+    setupSleepTimer();
+    setupOffline();
+    setupRolePlay();
+    setupPractice();
+    startListeningTimer();
 
     $('btnPlay').addEventListener('click', () => {
       maybeShowWordTip();

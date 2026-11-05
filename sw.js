@@ -1,15 +1,20 @@
-const CACHE_NAME = 'listen-pro-v1.29';
+const CACHE_NAME = 'listen-pro-v1.30';
 const ASSETS = [
   './',
   './index.html',
   './login.html',
   './css/fonts.css',
+  './css/remixicon.css',
   './css/style.css',
   './fonts/inter-latin-wght-normal.woff2',
+  './fonts/remixicon.woff2?v=3.5.0',
+  './icons/icon-192.png',
+  './icons/apple-touch-icon.png',
   './js/data.js',
   './js/topics.js',
   './js/dictionary.js',
   './js/audio.js',
+  './js/offline.js',
   './js/app.js',
   './js/auth.js',
   './js/auth-guard.js',
@@ -63,10 +68,15 @@ self.addEventListener('fetch', e => {
   e.respondWith(networkFirst());
 });
 
+// Offline audio downloaded by the learner (js/offline.js) lives in its own cache and
+// must survive app updates.
+const KEEP_CACHE_PREFIX = 'lp-audio-';
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys
+        .filter(k => k !== CACHE_NAME && !k.startsWith(KEEP_CACHE_PREFIX))
+        .map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

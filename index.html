@@ -16,15 +16,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Listening Pro</title>
     <link rel="icon" type="image/svg+xml" href="icon.svg?v=2" />
-    <link rel="apple-touch-icon" href="icon.svg?v=2" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.json" />
-    <!-- Inter is self-hosted (css/fonts.css); preload the Latin file so text renders in it right away -->
+    <!-- Inter and Remix Icon are self-hosted (css/fonts.css, css/remixicon.css); preload so text and icons render right away -->
     <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/remixicon.woff2?v=3.5.0" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/fonts.css" />
-    <link
-      href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css"
-      rel="stylesheet"
-    />
+    <link rel="stylesheet" href="css/remixicon.css" />
     <link rel="stylesheet" href="css/style.css" />
     <!-- Apply the saved theme before first paint so light mode does not flash dark. -->
     <script>
@@ -129,6 +128,12 @@
             <span id="levelLabel">All</span>
             <i class="ri-arrow-down-s-line"></i>
           </button>
+          <!-- Download this topic's audio for offline listening -->
+          <button id="btnOffline" class="dl-btn" type="button" data-state="none" title="Download for offline">
+            <i class="ri-download-cloud-2-line" id="offlineIcon"></i>
+            <span class="dl-ring" aria-hidden="true"></span>
+            <span class="dl-pct" id="offlinePct"></span>
+          </button>
           <!-- Wide layout: levels shown inline instead of the dropdown -->
           <div class="level-seg" id="levelSeg" role="radiogroup" aria-label="Level"></div>
         </section>
@@ -159,7 +164,10 @@
             <span class="np-who" id="npWho"></span>
             <span class="msg-level" id="npLevel"></span>
           </div>
-          <p class="np-text" id="npText"></p>
+          <div class="np-text-wrap" id="npTextWrap">
+            <p class="np-text" id="npText"></p>
+            <span class="blind-hint"><i class="ri-eye-line"></i><span data-i18n="revealText">Tap to show the text</span></span>
+          </div>
           <div class="np-cn-wrap" id="npCnWrap">
             <p class="np-cn" id="npCn"></p>
             <span class="np-cn-hint"><i class="ri-eye-line"></i><span data-i18n="revealCn">Click to show the translation</span></span>
@@ -168,6 +176,8 @@
             <span class="np-index" id="npIndex"></span>
             <span class="spacer"></span>
             <button class="np-tool" type="button" data-np="replay"><i class="ri-restart-line"></i><span data-i18n="replay">Replay</span></button>
+            <button class="np-tool" type="button" data-np="blind" id="npBlindBtn"><i class="ri-eye-off-line"></i><span data-i18n="blindShort">Blind</span></button>
+            <button class="np-tool" type="button" data-np="practice"><i class="ri-graduation-cap-line"></i><span data-i18n="practiceShort">Practise</span></button>
             <button class="np-tool" type="button" data-np="cn" id="npCnBtn"><i class="ri-translate-2"></i><span data-i18n="translation">Translation</span></button>
           </div>
         </div>
@@ -262,6 +272,7 @@
         </header>
         <div class="sheet-body">
           <div class="stat-tiles" id="statTiles"></div>
+          <p class="stat-totals" id="statTotals"></p>
 
           <h3 class="sheet-group" data-i18n="groupListening">Listening</h3>
           <div class="set-card">
@@ -288,6 +299,38 @@
                 </div>
               </div>
               <p class="set-hint" data-i18n="loopScopeHint">All topics: when a topic ends, the next one starts, and the last leads back to the first. This topic: start the same topic over.</p>
+            </div>
+            <div class="set-row set-row-col">
+              <div class="set-row-inline">
+                <span class="set-label"><i class="ri-speak-line"></i><span data-i18n="roleLabel">Role play</span></span>
+                <div class="seg" id="roleControl">
+                  <button class="seg-btn" data-role="off" data-i18n="roleOff">Off</button>
+                  <button class="seg-btn" data-role="A" data-i18n="roleA">I'm A</button>
+                  <button class="seg-btn" data-role="B" data-i18n="roleB">I'm B</button>
+                </div>
+              </div>
+              <p class="set-hint" data-i18n="roleHint">Your lines are not read aloud. Playback pauses so you can say them, then the dialogue goes on.</p>
+            </div>
+            <div class="set-row set-row-col">
+              <div class="set-row-inline">
+                <span class="set-label"><i class="ri-eye-off-line"></i><span data-i18n="blindLabel">Blind listening</span></span>
+                <button class="switch" id="blindSwitch" role="switch" aria-checked="false" data-i18n-title="blindLabel" title="Blind listening"><span class="switch-thumb"></span></button>
+              </div>
+              <p class="set-hint" data-i18n="blindHint">Hide the English text. Listen first, then tap a line to check it.</p>
+            </div>
+            <div class="set-row set-row-col">
+              <div class="set-row-inline">
+                <span class="set-label"><i class="ri-moon-clear-line"></i><span data-i18n="sleepLabel">Sleep timer</span></span>
+                <span class="set-value" id="sleepStatus"></span>
+              </div>
+              <div class="chip-row" id="sleepControl" role="radiogroup"></div>
+            </div>
+            <div class="set-row set-row-col">
+              <div class="set-row-inline">
+                <span class="set-label"><i class="ri-download-cloud-2-line"></i><span data-i18n="offlineLabel">Offline audio</span></span>
+                <button class="text-btn" id="btnOfflineClear" type="button" data-i18n="offlineClear">Delete all</button>
+              </div>
+              <p class="set-hint" id="offlineStatus"></p>
             </div>
           </div>
 
@@ -324,6 +367,55 @@
         </div>
       </section>
 
+      <!-- Practice Sheet: shadowing and dictation on the current line -->
+      <section class="sheet" id="practiceSheet" role="dialog" aria-modal="true">
+        <div class="sheet-handle"><span class="grabber"></span></div>
+        <header class="sheet-head">
+          <div>
+            <h2 data-i18n="practiceTitle">Practise this line</h2>
+            <p id="practiceSub">&nbsp;</p>
+          </div>
+          <button class="sheet-close" data-close-sheet title="Close"><i class="ri-close-line"></i></button>
+        </header>
+        <div class="sheet-body">
+          <div class="seg practice-tabs" id="practiceTabs" role="tablist">
+            <button class="seg-btn" type="button" role="tab" data-practice="shadow"><i class="ri-mic-line"></i><span data-i18n="shadowTab">Shadowing</span></button>
+            <button class="seg-btn" type="button" role="tab" data-practice="dictation"><i class="ri-keyboard-box-line"></i><span data-i18n="dictationTab">Dictation</span></button>
+          </div>
+
+          <!-- Shadowing: hear the line, record yourself, compare -->
+          <div class="practice-pane" id="shadowPane">
+            <p class="practice-text" id="shadowText"></p>
+            <p class="practice-cn" id="shadowCn"></p>
+            <div class="rec-stage">
+              <button class="rec-btn" id="btnRecord" type="button" data-state="idle">
+                <i class="ri-mic-fill" id="recIcon"></i>
+              </button>
+              <p class="rec-status" id="recStatus"></p>
+            </div>
+            <div class="practice-actions">
+              <button class="practice-btn" id="btnPlayOriginal" type="button"><i class="ri-volume-up-line"></i><span data-i18n="playOriginal">Original</span></button>
+              <button class="practice-btn" id="btnPlayMine" type="button" disabled><i class="ri-user-voice-line"></i><span data-i18n="playMine">My take</span></button>
+              <button class="practice-btn" id="btnCompare" type="button" disabled><i class="ri-play-circle-line"></i><span data-i18n="playCompare">Compare</span></button>
+            </div>
+          </div>
+
+          <!-- Dictation: hear the line, type it, check word by word -->
+          <div class="practice-pane" id="dictationPane" hidden>
+            <div class="practice-actions">
+              <button class="practice-btn" id="btnDictPlay" type="button"><i class="ri-play-fill"></i><span data-i18n="dictPlay">Play</span></button>
+              <button class="practice-btn" id="btnDictSlow" type="button"><i class="ri-speed-line"></i><span data-i18n="dictSlow">Slower</span></button>
+            </div>
+            <textarea class="dict-input" id="dictInput" rows="3" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+            <div class="practice-actions">
+              <button class="practice-btn primary" id="btnDictCheck" type="button"><i class="ri-check-line"></i><span data-i18n="dictCheck">Check</span></button>
+              <button class="practice-btn" id="btnDictNext" type="button"><i class="ri-arrow-right-line"></i><span data-i18n="dictNext">Next line</span></button>
+            </div>
+            <div class="dict-result" id="dictResult" hidden></div>
+          </div>
+        </div>
+      </section>
+
       <!-- Wordbook Sheet -->
       <section class="sheet" id="wordbookSheet" role="dialog" aria-modal="true">
         <div class="sheet-handle"><span class="grabber"></span></div>
@@ -345,6 +437,7 @@
     <script defer src="js/data.js"></script>
     <script defer src="js/topics.js"></script>
     <script defer src="js/audio.js"></script>
+    <script defer src="js/offline.js"></script>
     <script defer src="js/app.js"></script>
     <script defer src="js/auth-guard.js"></script>
     <!-- Dictionary is only needed when user taps a word. Loaded LAST and deferred
