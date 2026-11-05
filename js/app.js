@@ -35,6 +35,14 @@
     return REPEAT_OPTIONS.includes(saved) ? saved : 1;
   }
 
+  // What happens after the last line. 'all' = go on to the next topic (the last topic
+  // leads back to the first), 'topic' = start the current topic over.
+  const LOOP_SCOPES = ['all', 'topic'];
+  function readSavedLoopScope() {
+    const saved = localStorage.getItem('lp_loopScope');
+    return LOOP_SCOPES.includes(saved) ? saved : 'all';
+  }
+
   function readSavedLevel() {
     const saved = localStorage.getItem('lp_level');
     return saved === 'all' || LEVELS.includes(saved) ? saved : 'all';
@@ -48,6 +56,7 @@
     topic: readSavedTopic(),
     levelFilter: readSavedLevel(),
     repeat: readSavedRepeat(),
+    loopScope: readSavedLoopScope(),
     playsDone: 0,
     speed: parseFloat(localStorage.getItem('lp_speed') || '0.75'),
     fontSize: parseInt(localStorage.getItem('lp_fontSize') || '18'),
@@ -84,6 +93,8 @@
       groupListening: "Listening", groupDisplay: "Display",
       speakCnLabel: "Read Chinese aloud", speakCnHint: "After each English line, also play its Chinese translation.",
       speakCnOn: "Chinese read-aloud on", speakCnOff: "English only",
+      loopScopeLabel: "Loop", loopScopeTopic: "This topic",
+      loopScopeHint: "All topics: when a topic ends, the next one starts, and the last leads back to the first. This topic: start the same topic over.",
       themeLabel: "Theme", themeDark: "Dark", themeLight: "Light",
       fontLabel: "Text size",
       wordbookTitle: "Word Book", wordbookCount: n => `${n} saved`,
@@ -126,6 +137,8 @@
       groupListening: "听力", groupDisplay: "显示",
       speakCnLabel: "朗读中文", speakCnHint: "每句英文读完后，再读一遍中文翻译。",
       speakCnOn: "已开启中文朗读", speakCnOff: "只读英文",
+      loopScopeLabel: "循环范围", loopScopeTopic: "当前话题",
+      loopScopeHint: "全部话题：一个话题播完自动进入下一个，最后一个播完回到第一个。当前话题：播完后从第一句重新开始。",
       themeLabel: "主题", themeDark: "深色", themeLight: "浅色",
       fontLabel: "字号",
       wordbookTitle: "生词本", wordbookCount: n => `已收藏 ${n} 个`,
@@ -1040,8 +1053,21 @@
     return tracks;
   }
 
+  // The topic after topicId in sidebar order (wrapping round) that has lines at the
+  // chosen level. null for "all topics", or when no other topic has such lines.
+  function nextTopicAfter(topicId) {
+    const from = visibleTopics.findIndex(tp => tp.id === topicId);
+    if (from < 0) return null;
+    for (let step = 1; step < visibleTopics.length; step++) {
+      const topic = visibleTopics[(from + step) % visibleTopics.length];
+      if (sentencesInTopic(topic.id).some(s => state.levelFilter === 'all' || s.level === state.levelFilter)) return topic;
+    }
+    return null;
+  }
+
   // Called when one read of the current line finishes (file or speech).
   // Repeats the line until the chosen count is reached, then moves to the next line.
+  // After the last line it goes on to the next topic, or starts this topic over (state.loopScope).
   function handleSentenceEnd(viaSpeech) {
     state.playsDone++;
     const run = fn => {
@@ -1060,7 +1086,22 @@
       updatePlayBtn(true);
       return;
     }
-    updatePlayBtn(false);
+    const nextTopic = state.loopScope === 'all' ? nextTopicAfter(state.topic) : null;
+    if (nextTopic) {
+      // Same path as tapping the topic, so the list, header and saved topic all follow.
+      setTopic(nextTopic.id);
+      scrollActiveChipIntoView(true);
+      if (openSheetEl && openSheetEl.id === 'topicSheet') renderTopicSheet();
+    } else {
+      state.currentIndex = 0;
+      updateDisplay();
+    }
+    if (state.currentIndex < 0) {
+      updatePlayBtn(false);
+      return;
+    }
+    run(() => playCurrent('sequential'));
+    updatePlayBtn(true);
   }
 
   function playPasses(passes, onEnd, index = 0) {
@@ -1665,6 +1706,20 @@
       accentButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.accent === state.accent));
     };
     syncAccentActive();
+
+    // Read when a topic ends, so a change applies to the topic already playing.
+    const loopScopeButtons = document.querySelectorAll('#loopScopeControl .seg-btn');
+    const syncLoopScope = () => {
+      loopScopeButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.loopScope === state.loopScope));
+    };
+    syncLoopScope();
+    loopScopeButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.loopScope = btn.dataset.loopScope === 'topic' ? 'topic' : 'all';
+        localStorage.setItem('lp_loopScope', state.loopScope);
+        syncLoopScope();
+      });
+    });
 
     const speakCnSwitch = $('speakCnSwitch');
     const syncSpeakCn = () => speakCnSwitch.setAttribute('aria-checked', String(state.speakCn));
