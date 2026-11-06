@@ -2923,13 +2923,23 @@ button.stat-tile:active {
   }
 
   .np-who {
+    min-width: 0;
     font-size: 13px;
     font-weight: 600;
     color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Line number and level sit at the right of the speaker row */
+  .np-speaker .np-index {
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .np-speaker .msg-level {
-    margin-left: auto;
+    flex: 0 0 auto;
   }
 
   .np-text {
@@ -3104,15 +3114,12 @@ button.stat-tile:active {
     }
   }
 
+  /* Four equal tiles (icon above label) so every tool fits the 312px-wide panel */
   .np-tools {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
     margin-top: 22px;
-  }
-
-  .np-tools .spacer {
-    flex: 1;
   }
 
   .np-index {
@@ -3123,23 +3130,34 @@ button.stat-tile:active {
   }
 
   .np-tool {
-    height: 36px;
-    padding: 0 14px 0 12px;
-    border-radius: 999px;
+    min-width: 0;
+    height: 58px;
+    padding: 0 6px;
+    border-radius: 16px;
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text2);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    display: inline-flex;
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 4px;
     cursor: pointer;
     transition: color 0.2s, background 0.2s, border-color 0.2s, transform 0.15s;
   }
 
+  .np-tool span {
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .np-tool i {
-    font-size: 16px;
+    font-size: 19px;
+    line-height: 1;
   }
 
   .np-tool:active {
@@ -3952,12 +3970,8 @@ body.your-turn .msg.active .turn-tag {
   color: var(--text2);
 }
 
-/* Wide layout: the practice button joins the panel tools; let them wrap if the panel is narrow. */
+/* Wide layout: role-play colours in the current-line panel. */
 @media (min-width: 1024px) {
-  .np-tools {
-    flex-wrap: wrap;
-  }
-
   .now-panel.is-mine .np-who {
     color: var(--accent);
   }

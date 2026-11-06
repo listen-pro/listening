@@ -4,3 +4,4 @@ tools/audio/.tmp/
 tools/audio/preview/
 tools/audio/*.log
 .venv/
+tools/cloudbase-sdk/node_modules/

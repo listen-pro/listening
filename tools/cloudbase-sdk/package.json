@@ -1,0 +1,14 @@
+{
+  "name": "listenpro-cloudbase-sdk-bundle",
+  "private": true,
+  "description": "把 @cloudbase/js-sdk 打成浏览器可直接 <script> 引入的单文件 js/vendor/cloudbase.js",
+  "scripts": {
+    "build": "esbuild entry.js --bundle --minify --format=iife --platform=browser --target=es2018 --define:global=globalThis --legal-comments=none --outfile=../../js/vendor/cloudbase.js"
+  },
+  "dependencies": {
+    "@cloudbase/js-sdk": "3.11.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
