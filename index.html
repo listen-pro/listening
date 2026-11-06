@@ -42,6 +42,50 @@
         }
       })();
     </script>
+    <script>
+      // If a script fails or the network stalls, app.js never renders and the skeleton would stay
+      // forever. Offer a reload instead. A late successful render replaces this message.
+      (function () {
+        var STALL_MS = 15000;
+        var pending = null;
+
+        function show() {
+          var list = document.getElementById("sentenceList");
+          if (!list || !list.querySelector(".msg-skeleton")) return;
+          if (document.hidden) {
+            // Background tabs delay the first render; check again once the page is visible.
+            document.addEventListener("visibilitychange", function again() {
+              if (document.hidden) return;
+              document.removeEventListener("visibilitychange", again);
+              later(1500);
+            });
+            return;
+          }
+          var zh = localStorage.getItem("lp_lang") === "zh";
+          list.innerHTML =
+            '<li class="convo-empty boot-error">' +
+            (zh ? "句子没有加载出来，请检查网络后重试" : "The sentences did not load. Check your connection and try again.") +
+            '<br><button type="button">' + (zh ? "重新加载" : "Reload") + "</button></li>";
+          list.querySelector("button").addEventListener("click", function () {
+            window.location.reload();
+          });
+        }
+
+        function later(ms) {
+          clearTimeout(pending);
+          pending = setTimeout(show, ms);
+        }
+
+        // A script that failed to load, or an error thrown while the app starts.
+        // Failed images, audio and styles do not stop the list from rendering, so they are ignored.
+        window.addEventListener("error", function (e) {
+          var el = e.target;
+          if (el && el !== window && el.tagName !== "SCRIPT") return;
+          later(1500);
+        }, true);
+        later(STALL_MS);
+      })();
+    </script>
   </head>
   <body>
     <audio id="bgPlayer" preload="auto" playsinline webkit-playsinline style="display:none"></audio>

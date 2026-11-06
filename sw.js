@@ -1,4 +1,4 @@
-const CACHE_NAME = 'listen-pro-v1.32';
+const CACHE_NAME = 'listen-pro-v1.33';
 const ASSETS = [
   './',
   './index.html',
@@ -36,6 +36,10 @@ self.addEventListener('message', e => {
   }
 });
 
+// On a bad connection a request can hang instead of failing. When a cached copy exists, stop
+// waiting after this long and use it, so the page never sits on a half-loaded state.
+const NETWORK_TIMEOUT = 4000;
+
 self.addEventListener('fetch', e => {
   const request = e.request;
   if (request.method !== 'GET') return;
@@ -44,29 +48,44 @@ self.addEventListener('fetch', e => {
   // Media files must bypass the worker so the browser can keep playing them in the background.
   if (url.pathname.includes('/audio/')) return;
 
+  // The network copy is still saved when the cached one was served first, ready for next time.
+  let saved = Promise.resolve();
+  const fromNetwork = fetch(request).then(fresh => {
+    if (fresh && fresh.ok) {
+      const copy = fresh.clone();
+      saved = caches.open(CACHE_NAME).then(c => c.put(request, copy));
+    }
+    return fresh;
+  });
+  e.waitUntil(fromNetwork.then(() => saved, () => {}).catch(() => {}));
+
   const networkFirst = async () => {
     const cache = await caches.open(CACHE_NAME);
-    try {
-      const fresh = await fetch(request);
-      if (fresh && fresh.ok) {
-        cache.put(request, fresh.clone());
+    const cached = await cache.match(request) || await caches.match(request);
+    if (!cached) {
+      try {
+        return await fromNetwork;
+      } catch (err) {
+        if (request.mode === 'navigate') {
+          const fallback = await cache.match('./index.html') || await caches.match('./index.html');
+          if (fallback) return fallback;
+        }
+        throw err;
       }
-      return fresh;
-    } catch (err) {
-      const cached = await cache.match(request) || await caches.match(request);
-      if (cached) return cached;
-      if (request.mode === 'navigate') {
-        const fallback = await cache.match('./index.html') || await caches.match('./index.html');
-        if (fallback) return fallback;
-      }
-      throw err;
     }
+    // Network first, but fall back to the cached copy on a failure, an error status or a stall.
+    return new Promise(resolve => {
+      const timer = setTimeout(() => resolve(cached), NETWORK_TIMEOUT);
+      fromNetwork.then(fresh => {
+        clearTimeout(timer);
+        resolve(fresh && fresh.ok ? fresh : cached);
+      }, () => {
+        clearTimeout(timer);
+        resolve(cached);
+      });
+    });
   };
 
-  if (request.mode === 'navigate') {
-    e.respondWith(networkFirst());
-    return;
-  }
   e.respondWith(networkFirst());
 });
 
