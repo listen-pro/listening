@@ -35,7 +35,7 @@
     <script src="js/auth.js"></script>
     <script>
       // Immediately redirect if no session in storage (fast, synchronous check)
-      // Full re-verification against CloudBase happens asynchronously via auth-guard.js
+      // Full re-verification against users.json happens asynchronously via auth-guard.js
       (function () {
         if (!Auth.getSession()) {
           Auth.redirectToLogin();
@@ -482,18 +482,10 @@
     <script defer src="js/audio.js"></script>
     <script defer src="js/offline.js"></script>
     <script defer src="js/app.js"></script>
-    <!-- Cloud sync of wordbook, stats and positions. After app.js, which listens for its events. -->
-    <script defer src="js/sync.js"></script>
     <script defer src="js/auth-guard.js"></script>
     <!-- Dictionary is only needed when user taps a word. Loaded LAST and deferred
          so it does not block first paint or the sentence list render. -->
     <script defer src="js/dictionary.js"></script>
-    <script>
-      // Deferred scripts have all run by DOMContentLoaded.
-      window.addEventListener("DOMContentLoaded", () => {
-        if (window.Sync) Sync.start();
-      });
-    </script>
     <script>
       if ("serviceWorker" in navigator) {
         let refreshing = false;

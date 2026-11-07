@@ -66,10 +66,6 @@
   // Last line reached in each topic ({ topicId: sentenceId }), so the app reopens where the
   // learner stopped. A topic that is played to the end is forgotten and starts from the top.
   const POSITIONS_KEY = 'lp_positions';
-
-  // Tell the cloud sync (js/sync.js) that a synced key (wordbook, stats, positions) just changed.
-  const markSync = name => { if (window.Sync) window.Sync.touch(name); };
-
   function readSavedPositions() {
     try {
       const saved = JSON.parse(localStorage.getItem(POSITIONS_KEY) || '{}');
@@ -525,14 +521,12 @@
     if (state.positions[state.topic] === s.id) return;
     state.positions[state.topic] = s.id;
     localStorage.setItem(POSITIONS_KEY, JSON.stringify(state.positions));
-    markSync('positions');
   }
 
   function forgetPosition(topicId) {
     if (!(topicId in state.positions)) return;
     delete state.positions[topicId];
     localStorage.setItem(POSITIONS_KEY, JSON.stringify(state.positions));
-    markSync('positions');
   }
 
   // ---- Filter Logic ----
@@ -1776,7 +1770,6 @@
         $('popupFav').classList.add('saved');
       }
       localStorage.setItem('lp_wordbook', JSON.stringify(state.wordbook));
-      markSync('wordbook');
       updateWordbookBadge();
     });
     // Close popup on outside click
@@ -1865,39 +1858,10 @@
   const STREAK_MIN_SEC = 60; // a day counts toward the streak after one minute of listening
   let heardSet = new Set(state.stats.heard.map(String));
 
-  function persistStats() {
+  function saveStats() {
     state.stats.heard = [...heardSet];
     localStorage.setItem('lp_stats', JSON.stringify(state.stats));
   }
-
-  function saveStats() {
-    persistStats();
-    markSync('stats');
-  }
-
-  // ---- Cloud sync hooks (js/sync.js) ----
-  // Before a merge, write the in-memory stats (up to 15s of listening is not saved yet).
-  window.addEventListener('lp:presync', persistStats);
-
-  // After a merge changed local data, pick it up and refresh what is on screen.
-  window.addEventListener('lp:synced', e => {
-    const changed = (e.detail && e.detail.changed) || [];
-    if (changed.includes('wordbook')) {
-      try { state.wordbook = JSON.parse(localStorage.getItem('lp_wordbook') || '[]'); } catch (_) { state.wordbook = []; }
-      updateWordbookBadge();
-      if (openSheetEl && openSheetEl.id === 'wordbookSheet') renderWordbook();
-    }
-    if (changed.includes('stats')) {
-      state.stats = readSavedStats();
-      heardSet = new Set(state.stats.heard.map(String));
-      renderStats();
-    }
-    if (changed.includes('positions')) {
-      state.positions = readSavedPositions();
-      // Nothing started yet: jump to where the other device stopped.
-      if (!audio.isPlaying && state.currentIndex <= 0) applyFilters();
-    }
-  });
 
   function dayKey(date = new Date()) {
     const pad = n => String(n).padStart(2, '0');
@@ -2017,7 +1981,6 @@
         const w = btn.dataset.word;
         state.wordbook = state.wordbook.filter(x => x !== w);
         localStorage.setItem('lp_wordbook', JSON.stringify(state.wordbook));
-        markSync('wordbook');
         updateWordbookBadge();
         renderWordbook();
       });

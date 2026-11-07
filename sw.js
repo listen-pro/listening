@@ -1,4 +1,4 @@
-const CACHE_NAME = 'listen-pro-v1.33';
+const CACHE_NAME = 'listen-pro-v1.34';
 const ASSETS = [
   './',
   './index.html',
@@ -17,8 +17,6 @@ const ASSETS = [
   './js/offline.js',
   './js/app.js',
   './js/auth.js',
-  './js/sync.js',
-  './js/vendor/cloudbase.js',
   './js/auth-guard.js',
   './manifest.json',
   './icon.svg?v=2'

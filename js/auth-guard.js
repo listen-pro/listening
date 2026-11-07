@@ -2,7 +2,7 @@
  * auth-guard.js
  *
  * Runs AFTER app.js is loaded. Responsibilities:
- * 1. Full session verification against CloudBase on page load
+ * 1. Full session verification against users.json on page load
  * 2. Re-verify on every play / sentence switch action
  * 3. Wire up the logout button
  *
