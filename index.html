@@ -19,11 +19,11 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.json" />
-    <!-- Inter and Remix Icon are self-hosted (css/fonts.css, css/remixicon.css); preload so text and icons render right away -->
+    <!-- Inter is self-hosted (css/fonts.css); preload so text renders right away.
+         The icon font is embedded in css/remixicon.css (built by tools/icons/build.mjs), so it needs no preload. -->
     <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="fonts/remixicon.woff2?v=3.5.0" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/fonts.css" />
-    <link rel="stylesheet" href="css/remixicon.css" />
+    <link rel="stylesheet" href="css/remixicon.css?v=f43055da" />
     <link rel="stylesheet" href="css/style.css" />
     <!-- Apply the saved theme before first paint so light mode does not flash dark. -->
     <script>

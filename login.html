@@ -16,11 +16,11 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.json" />
-    <!-- Inter and Remix Icon are self-hosted (css/fonts.css, css/remixicon.css); preload so text and icons render right away -->
+    <!-- Inter is self-hosted (css/fonts.css); preload so text renders right away.
+         The icon font is embedded in css/remixicon.css (built by tools/icons/build.mjs), so it needs no preload. -->
     <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="fonts/remixicon.woff2?v=3.5.0" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/fonts.css" />
-    <link rel="stylesheet" href="css/remixicon.css" />
+    <link rel="stylesheet" href="css/remixicon.css?v=f43055da" />
     <!-- Apply the saved theme before first paint (same key as the main app). -->
     <script>
       (function () {
@@ -840,6 +840,14 @@
 
       .field.has-toggle input {
         padding-right: 52px;
+      }
+
+      /* iOS masks passwords with U+25CF (●), which the Inter subset does not have. Safari then
+         draws Inter's "NO GLYPH" box for every character instead of falling back to another font.
+         Masked text uses the system font, which has the dot. Shown passwords (type=text) keep Inter. */
+      .field input[type="password"] {
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+          "Microsoft YaHei", "Segoe UI", sans-serif;
       }
 
       .field label {

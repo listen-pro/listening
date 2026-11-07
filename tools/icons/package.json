@@ -1,0 +1,12 @@
+{
+  "name": "listenpro-icons",
+  "private": true,
+  "type": "module",
+  "description": "Builds css/remixicon.css with only the Remix Icon glyphs the app uses",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "subset-font": "^2.9.0"
+  }
+}

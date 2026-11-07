@@ -1,13 +1,12 @@
-const CACHE_NAME = 'listen-pro-v1.36';
+const CACHE_NAME = 'listen-pro-v1.37';
 const ASSETS = [
   './',
   './index.html',
   './login.html',
   './css/fonts.css',
-  './css/remixicon.css',
+  './css/remixicon.css?v=f43055da',
   './css/style.css',
   './fonts/inter-latin-wght-normal.woff2',
-  './fonts/remixicon.woff2?v=3.5.0',
   './icons/icon-192.png',
   './icons/apple-touch-icon.png',
   './js/data.js',
@@ -38,9 +37,10 @@ self.addEventListener('message', e => {
 // waiting after this long and use it, so the page never sits on a half-loaded state.
 const NETWORK_TIMEOUT = 4000;
 
-// Fonts and icons do not change between app versions (the icon font URL carries its version),
-// so a cached copy is used without asking the network. Downloading them again on every visit
-// kept the icons blank for 5-15 seconds on a slow connection. A new CACHE_NAME still refreshes them.
+// Fonts and icons do not change between app versions (css/remixicon.css, which embeds the icon
+// font, carries a content hash in its URL), so a cached copy is used without asking the network.
+// Downloading them again on every visit kept the icons blank for 5-15 seconds on a slow
+// connection. A new CACHE_NAME still refreshes them.
 const STATIC_ASSET = /\/(fonts|icons)\/[^/]+$|\/icon\.svg$|\/css\/(fonts|remixicon)\.css$/;
 
 self.addEventListener('fetch', e => {
