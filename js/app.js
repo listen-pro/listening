@@ -272,7 +272,7 @@
   };
 
   const audio = new AudioEngine();
-  // Offline downloads are handed to the player as blob: URLs (see js/offline.js).
+  // Offline downloads and lines fetched ahead are handed to the player as blob: URLs (see js/offline.js).
   const offline = typeof OfflineAudio !== 'undefined' && OfflineAudio.supported ? OfflineAudio : null;
   if (offline) audio.resolveSrc = src => offline.resolve(src);
 
@@ -1269,21 +1269,25 @@
     return tracks;
   }
 
-  // ---- Offline audio: prepare downloaded files a few lines ahead of the player ----
+  // ---- Audio ahead of the player: the next few lines are held as blob: URLs ----
+  // Downloaded files come from the cache, the rest from the network into memory. Without this
+  // a phone waits for a request at every new clip (gap, then the next line) between two lines.
   const PREPARE_AHEAD = 4;
   function prepareOfflineAhead() {
     if (!offline || state.currentIndex < 0) return;
     const srcs = [UI_SRC.prompt, UI_SRC.gapPass, UI_SRC.gapLine];
-    for (let i = state.currentIndex; i < Math.min(state.filtered.length, state.currentIndex + PREPARE_AHEAD); i++) {
-      const s = state.filtered[i];
+    const addLine = s => {
+      if (!s || isMyLine(s) || !canPlaySentenceFromFile(s)) return;
       srcs.push(englishSrc(s));
       if (state.speakCn) srcs.push(chineseSrc(s));
+    };
+    for (let i = state.currentIndex; i < Math.min(state.filtered.length, state.currentIndex + PREPARE_AHEAD); i++) {
+      addLine(state.filtered[i]);
     }
     // Wrapping to the next topic: also get its first line ready.
     if (state.currentIndex >= state.filtered.length - PREPARE_AHEAD && state.loopScope === 'all') {
       const nextTopic = nextTopicAfter(state.topic);
-      const first = nextTopic && sentencesInTopic(nextTopic.id).find(s => state.levelFilter === 'all' || s.level === state.levelFilter);
-      if (first) srcs.push(englishSrc(first));
+      addLine(nextTopic && sentencesInTopic(nextTopic.id).find(s => state.levelFilter === 'all' || s.level === state.levelFilter));
     }
     offline.prepare(srcs);
   }
