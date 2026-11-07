@@ -1,4 +1,4 @@
-const CACHE_NAME = 'listen-pro-v1.35';
+const CACHE_NAME = 'listen-pro-v1.36';
 const ASSETS = [
   './',
   './index.html',
@@ -38,6 +38,11 @@ self.addEventListener('message', e => {
 // waiting after this long and use it, so the page never sits on a half-loaded state.
 const NETWORK_TIMEOUT = 4000;
 
+// Fonts and icons do not change between app versions (the icon font URL carries its version),
+// so a cached copy is used without asking the network. Downloading them again on every visit
+// kept the icons blank for 5-15 seconds on a slow connection. A new CACHE_NAME still refreshes them.
+const STATIC_ASSET = /\/(fonts|icons)\/[^/]+$|\/icon\.svg$|\/css\/(fonts|remixicon)\.css$/;
+
 self.addEventListener('fetch', e => {
   const request = e.request;
   if (request.method !== 'GET') return;
@@ -45,6 +50,17 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return;
   // Media files must bypass the worker so the browser can keep playing them in the background.
   if (url.pathname.includes('/audio/')) return;
+
+  if (STATIC_ASSET.test(url.pathname)) {
+    e.respondWith(caches.match(request).then(hit => hit || fetch(request).then(fresh => {
+      if (fresh.ok) {
+        const copy = fresh.clone();
+        e.waitUntil(caches.open(CACHE_NAME).then(c => c.put(request, copy)).catch(() => {}));
+      }
+      return fresh;
+    })));
+    return;
+  }
 
   // The network copy is still saved when the cached one was served first, ready for next time.
   let saved = Promise.resolve();
@@ -72,15 +88,20 @@ self.addEventListener('fetch', e => {
       }
     }
     // Network first, but fall back to the cached copy on a failure, an error status or a stall.
+    // The whole file has to arrive in time, not only the headers: a server can answer at once
+    // and then send the body slowly (GitHub Pages on a slow line does), which would hold the
+    // page up. cache.put() resolves only once the body has been read to the end.
     return new Promise(resolve => {
       const timer = setTimeout(() => resolve(cached), NETWORK_TIMEOUT);
-      fromNetwork.then(fresh => {
-        clearTimeout(timer);
-        resolve(fresh && fresh.ok ? fresh : cached);
-      }, () => {
-        clearTimeout(timer);
-        resolve(cached);
-      });
+      fromNetwork
+        .then(fresh => (fresh && fresh.ok ? saved.then(() => fresh) : cached))
+        .then(res => {
+          clearTimeout(timer);
+          resolve(res);
+        }, () => {
+          clearTimeout(timer);
+          resolve(cached);
+        });
     });
   };
 
