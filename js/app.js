@@ -107,7 +107,7 @@
   const i18n = {
     en: {
       allTopics: "All topics", topicsTitle: "Choose a topic", topicsSub: "Pick a scene to practise",
-      sceneDaily: "Daily life", sceneBusiness: "Business",
+      sceneDaily: "Daily life", sceneBusiness: "Business", sceneIt: "IT",
       allLevels: "All levels", levelTitle: "Level",
       unitSentences: n => `${n} ${n === 1 ? 'sentence' : 'sentences'}`,
       unitTopics: n => `${n} topics`,
@@ -187,7 +187,7 @@
     },
     zh: {
       allTopics: "全部话题", topicsTitle: "选择话题", topicsSub: "挑一个场景开始练习",
-      sceneDaily: "日常生活", sceneBusiness: "职场商务",
+      sceneDaily: "日常生活", sceneBusiness: "职场商务", sceneIt: "IT",
       allLevels: "全部难度", levelTitle: "难度",
       unitSentences: n => `${n} 句`,
       unitTopics: n => `${n} 个话题`,
@@ -590,6 +590,22 @@
   }
 
   // ---- Topic Rail / Head / Sheet ----
+  // Topics stay in one list for playback order. The panel groups them by scene,
+  // and IT is its own category so each conversation under it plays on its own.
+  function sceneGroups() {
+    const order = [
+      { id: 'daily', label: t('sceneDaily') },
+      { id: 'business', label: t('sceneBusiness') },
+      { id: 'it', label: t('sceneIt') }
+    ];
+    return order
+      .map(scene => ({
+        label: scene.label,
+        items: visibleTopics.filter(tp => (tp.scene || 'daily') === scene.id)
+      }))
+      .filter(group => group.items.length);
+  }
+
   function renderTopicRail() {
     if (!topicRail) return;
     const chip = (id, icon, hue, label) => {
@@ -620,10 +636,7 @@
       </button>`;
     };
     let html = item('all', 'ri-stack-line', 'var(--all-h)', t('allTopics'), state.sentences.length);
-    const groups = [
-      { label: t('sceneDaily'), items: visibleTopics.filter(tp => tp.scene !== 'business') },
-      { label: t('sceneBusiness'), items: visibleTopics.filter(tp => tp.scene === 'business') }
-    ];
+    const groups = sceneGroups();
     groups.forEach(group => {
       if (!group.items.length) return;
       html += `<h3 class="side-group">${escapeHtml(group.label)}</h3>`;
@@ -684,10 +697,7 @@
         </span>
         <span class="tc-count">${allActive ? check : ''}</span>
       </button>`;
-    const groups = [
-      { label: t('sceneDaily'), items: visibleTopics.filter(tp => tp.scene !== 'business') },
-      { label: t('sceneBusiness'), items: visibleTopics.filter(tp => tp.scene === 'business') }
-    ];
+    const groups = sceneGroups();
     groups.forEach(group => {
       if (!group.items.length) return;
       html += `<h3 class="sheet-group">${escapeHtml(group.label)}</h3><div class="topic-grid">${group.items.map(card).join('')}</div>`;
