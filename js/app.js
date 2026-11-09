@@ -296,6 +296,8 @@
   refreshAudioCatalog();
   setInterval(refreshAudioCatalog, 20000);
 
+  // Lock-screen play with nothing queued (for example after the line fell back to speech).
+  audio.onMediaPlay = () => { if (!audio.isPlaying) togglePlay(); };
   audio.onMediaPrev = () => playPrev();
   audio.onMediaNext = () => playNext();
   audio.onPlaybackChange = playing => updatePlayBtn(playing);

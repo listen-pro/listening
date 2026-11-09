@@ -431,6 +431,8 @@ class AudioEngine {
     this._media = el;
     el.addEventListener('ended', () => this._onMediaEnded());
     el.addEventListener('seeking', () => this._onMediaSeeking());
+    el.addEventListener('pause', () => this._onMediaPause());
+    el.addEventListener('play', () => this._onMediaPlay());
     el.addEventListener('error', () => this._onMediaError());
     el.addEventListener('timeupdate', () => this._onMediaTime());
     document.addEventListener('visibilitychange', () => this._onVisibility());
@@ -513,6 +515,29 @@ class AudioEngine {
       return;
     }
     this._onMediaEnded();
+  }
+
+  // The system paused the clip (another app's audio, a phone call). Without this the player
+  // still counted as playing, so the lock-screen play button did nothing.
+  _onMediaPause() {
+    const el = this._media;
+    if (!el || !el.paused) return; // playing again already: a switch to the next clip
+    if (!this._mediaEventIsCurrent() || this._userPaused || !this.isPlaying) return;
+    this._userPaused = true;
+    this.isPlaying = false;
+    this.isPaused = true;
+    this._setSessionState('paused');
+    this._notifyPlayback(false);
+  }
+
+  // The system resumed by itself after a short interruption.
+  _onMediaPlay() {
+    if (!this._mediaEventIsCurrent() || !this.isPaused || this._media.paused) return;
+    this._userPaused = false;
+    this.isPaused = false;
+    this.isPlaying = true;
+    this._setSessionState('playing');
+    this._notifyPlayback(true);
   }
 
   // Also reached through _onMediaSeeking and _onMediaTime, as a looping clip never fires 'ended'.
@@ -622,8 +647,8 @@ class AudioEngine {
       try { session.setActionHandler(name, handler); } catch (e) {}
     };
     bind('play', () => {
-      if (this.isPaused && this._queue.length) this.resume();
-      else if (this.onMediaPlay) this.onMediaPlay();
+      if (this._queue.length && this._media && this._media.paused) this.resume();
+      else if (!this.isPlaying && this.onMediaPlay) this.onMediaPlay();
     });
     bind('pause', () => {
       if (this.isPlaying) this.pause();
