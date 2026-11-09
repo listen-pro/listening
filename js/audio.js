@@ -30,6 +30,8 @@ class AudioEngine {
     this._userPaused = false;
     this._playedCritical = false;
     this._trackSettled = false;
+    this._lastTime = 0;
+    this._selfSeek = false;
     this._sessionBound = false;
     this.onPlaybackChange = null;
     this.onMediaPlay = null;
@@ -162,7 +164,8 @@ class AudioEngine {
     }
   }
 
-  stop(silent = false) {
+  // keepSource: playQueue() sets the next file straight away, so the element is only paused.
+  stop(silent = false, keepSource = false) {
     if (this._pendingSpeakTimer) {
       clearTimeout(this._pendingSpeakTimer);
       this._pendingSpeakTimer = null;
@@ -178,7 +181,7 @@ class AudioEngine {
     if (this._media) {
       this._media.dataset.token = '0';
       this._media.pause();
-      this._media.removeAttribute('src');
+      if (!keepSource) this._media.removeAttribute('src');
     }
     this.stopClip();
     this.synth.cancel();
@@ -228,7 +231,7 @@ class AudioEngine {
   }
 
   playQueue(tracks, hooks = {}) {
-    this.stop(true);
+    this.stop(true, true);
     this._queue = tracks.slice();
     this._queueIndex = 0;
     this._queueHooks = hooks;
@@ -419,8 +422,15 @@ class AudioEngine {
     el.preload = 'auto';
     el.setAttribute('playsinline', '');
     el.setAttribute('webkit-playsinline', '');
+    // A clip that plays to its natural end closes the audio session in an iOS Home Screen web
+    // app. In the background (switched to another app, not locked) iOS then refuses the next
+    // play(), so playback stopped after one clip. With loop on, a clip never ends: it jumps
+    // back to 0:00, and that jump (a 'seeking' event) is taken as the end of the clip. The next
+    // file is set in the same event, while the session is still open. See WebKit bug 261858.
+    el.loop = true;
     this._media = el;
     el.addEventListener('ended', () => this._onMediaEnded());
+    el.addEventListener('seeking', () => this._onMediaSeeking());
     el.addEventListener('error', () => this._onMediaError());
     el.addEventListener('timeupdate', () => this._onMediaTime());
     document.addEventListener('visibilitychange', () => this._onVisibility());
@@ -447,6 +457,8 @@ class AudioEngine {
       return;
     }
     this._trackSettled = false;
+    this._lastTime = 0;
+    this._selfSeek = false;
     const el = this._ensureMedia();
     el.dataset.token = String(token);
     if (track.title) this._updateSessionMetadata(track);
@@ -470,7 +482,12 @@ class AudioEngine {
       }
     };
     if (el.src === absolute) {
-      try { el.currentTime = 0; } catch (e) {}
+      // Same file again (the gap clip in a role-play turn): right after a wrap it is already
+      // at the start. Otherwise rewind, and mark the seek so it is not taken for a wrap.
+      if (el.currentTime > 0.05) {
+        this._selfSeek = true;
+        try { el.currentTime = 0; } catch (e) { this._selfSeek = false; }
+      }
       start();
       return;
     }
@@ -488,6 +505,17 @@ class AudioEngine {
     return this._media.dataset.token === String(this._activeToken);
   }
 
+  // The looping element jumped back to the start: the clip has finished (see _ensureMedia).
+  // The player itself only seeks in _playTrack, and marks that seek.
+  _onMediaSeeking() {
+    if (this._selfSeek) {
+      this._selfSeek = false;
+      return;
+    }
+    this._onMediaEnded();
+  }
+
+  // Also reached through _onMediaSeeking and _onMediaTime, as a looping clip never fires 'ended'.
   _onMediaEnded() {
     if (!this._mediaEventIsCurrent()) return;
     if (this._userPaused || this._trackSettled) return;
@@ -528,6 +556,7 @@ class AudioEngine {
 
   _finishQueue() {
     const hooks = this._queueHooks;
+    const token = this._queueToken;
     this._queue = [];
     this._queueHooks = null;
     this.isPlaying = false;
@@ -535,11 +564,25 @@ class AudioEngine {
     this._setSessionState('none');
     this._notifyPlayback(false);
     if (hooks && hooks.onEnd) hooks.onEnd();
+    // The element loops, so the last clip would keep sounding. Pausing keeps the audio session
+    // open; skip it when onEnd already started the next queue.
+    if (this._queueToken === token && this._media) this._media.pause();
   }
 
   _onMediaTime() {
-    if (!this.onProgress || !this._media) return;
-    const duration = this._media.duration;
+    const el = this._media;
+    if (!el) return;
+    const t = el.currentTime;
+    if (this._selfSeek && !el.seeking && t > 0.05) this._selfSeek = false;
+    // Backup for a wrap whose 'seeking' event did not arrive: the time went backwards.
+    if (!this._selfSeek && !el.seeking && this._lastTime - t > 0.1) {
+      this._lastTime = 0;
+      this._onMediaEnded();
+      return;
+    }
+    this._lastTime = t;
+    if (!this.onProgress) return;
+    const duration = el.duration;
     if (!duration || !Number.isFinite(duration)) return;
     this.onProgress(Math.min(100, (this._media.currentTime / duration) * 100));
   }
