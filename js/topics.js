@@ -13,6 +13,7 @@ const TOPICS = [
   { id: 'home', scene: 'daily', icon: 'ri-home-4-line', hue: 152, name: { zh: '居家生活', en: 'At Home' } },
   { id: 'plans', scene: 'daily', icon: 'ri-calendar-event-line', hue: 318, name: { zh: '邀约休闲', en: 'Plans & Fun' } },
   { id: 'feelings', scene: 'daily', icon: 'ri-heart-pulse-line', hue: 350, name: { zh: '情绪健康', en: 'Feelings & Health' } },
+  { id: 'dentist', scene: 'daily', icon: 'ri-stethoscope-line', hue: 192, name: { zh: '看牙医', en: 'Dentist' } },
   { id: 'shopping', scene: 'daily', icon: 'ri-shopping-bag-3-line', hue: 45, name: { zh: '购物穿搭', en: 'Shopping' } },
   { id: 'help', scene: 'daily', icon: 'ri-hand-heart-line', hue: 245, name: { zh: '沟通求助', en: 'Asking for Help' } },
   { id: 'work', scene: 'daily', icon: 'ri-book-open-line', hue: 100, name: { zh: '工作学习', en: 'Work & Study' } },
