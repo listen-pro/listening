@@ -20,5 +20,6 @@ const TOPICS = [
   { id: 'teamwork', scene: 'business', icon: 'ri-team-line', hue: 200, name: { zh: '项目协作', en: 'Teamwork' } },
   { id: 'strategy', scene: 'business', icon: 'ri-line-chart-line', hue: 36, name: { zh: '战略研讨', en: 'Strategy' } },
   { id: 'it', scene: 'it', icon: 'ri-terminal-box-line', hue: 172, name: { zh: '研发日常', en: 'Engineering' } },
-  { id: 'onboarding', scene: 'it', icon: 'ri-user-add-line', hue: 128, name: { zh: '新人入职', en: 'Onboarding' } }
+  { id: 'onboarding', scene: 'it', icon: 'ri-user-add-line', hue: 128, name: { zh: '新人入职', en: 'Onboarding' } },
+  { id: 'implementation', scene: 'it', icon: 'ri-route-line', hue: 290, name: { zh: '产品实施', en: 'Implementation' } }
 ];
