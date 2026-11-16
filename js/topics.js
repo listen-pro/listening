@@ -17,6 +17,8 @@ const TOPICS = [
   { id: 'shopping', scene: 'daily', icon: 'ri-shopping-bag-3-line', hue: 45, name: { zh: '购物穿搭', en: 'Shopping' } },
   { id: 'help', scene: 'daily', icon: 'ri-hand-heart-line', hue: 245, name: { zh: '沟通求助', en: 'Asking for Help' } },
   { id: 'work', scene: 'daily', icon: 'ri-book-open-line', hue: 100, name: { zh: '工作学习', en: 'Work & Study' } },
+  { id: 'kindergarten', scene: 'daily', icon: 'ri-parent-line', hue: 330, name: { zh: '幼儿园老师', en: 'Kindergarten Teacher' } },
+  { id: 'nutritionist', scene: 'daily', icon: 'ri-leaf-line', hue: 120, name: { zh: '营养师', en: 'Nutritionist' } },
   { id: 'teamwork', scene: 'business', icon: 'ri-team-line', hue: 200, name: { zh: '项目协作', en: 'Teamwork' } },
   { id: 'strategy', scene: 'business', icon: 'ri-line-chart-line', hue: 36, name: { zh: '战略研讨', en: 'Strategy' } },
   { id: 'it', scene: 'it', icon: 'ri-terminal-box-line', hue: 172, name: { zh: '研发日常', en: 'Engineering' } },
