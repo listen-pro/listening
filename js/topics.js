@@ -9,6 +9,7 @@ const TOPICS = [
   { id: 'chat', scene: 'daily', icon: 'ri-question-answer-line', hue: 215, name: { zh: '随口闲聊', en: 'Small Talk' } },
   { id: 'travel', scene: 'daily', icon: 'ri-plane-line', hue: 188, name: { zh: '出行旅途', en: 'Travel' } },
   { id: 'accident', scene: 'daily', icon: 'ri-truck-line', hue: 8, name: { zh: '车祸新闻', en: 'Accident' } },
+  { id: 'smoking', scene: 'daily', icon: 'ri-forbid-line', hue: 0, name: { zh: '北京禁烟', en: 'Smoking Ban' } },
   { id: 'food', scene: 'daily', icon: 'ri-restaurant-2-line', hue: 26, name: { zh: '餐饮美食', en: 'Food & Drink' } },
   { id: 'bakery', scene: 'daily', icon: 'ri-cake-3-line', hue: 14, name: { zh: '面包店', en: 'Bakery' } },
   { id: 'home', scene: 'daily', icon: 'ri-home-4-line', hue: 152, name: { zh: '居家生活', en: 'At Home' } },

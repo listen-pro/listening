@@ -1,10 +1,10 @@
-const CACHE_NAME = 'listen-pro-v1.48';
+const CACHE_NAME = 'listen-pro-v1.49';
 const ASSETS = [
   './',
   './index.html',
   './login.html',
   './css/fonts.css',
-  './css/remixicon.css?v=bd417931',
+  './css/remixicon.css?v=180aa61d',
   './css/style.css',
   './fonts/inter-latin-wght-normal.woff2',
   './icons/icon-192.png',
